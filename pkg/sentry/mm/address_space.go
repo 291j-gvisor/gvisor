@@ -17,6 +17,8 @@ package mm
 import (
 	"fmt"
 	"sync/atomic"
+	"os"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/atomicbitops"
 	"gvisor.dev/gvisor/pkg/sentry/platform"
@@ -151,6 +153,7 @@ func (mm *MemoryManager) Deactivate() {
 // Preconditions: mm.activeMu must be locked. mm.as != nil. ar.Length() != 0.
 // ar must be page-aligned. pseg == mm.pmas.LowerBoundSegment(ar.Start).
 func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, precommit bool) error {
+	t1 := time.Now()
 	// By default, map entire pmas at a time, under the assumption that there
 	// is no cost to mapping more of a pma than necessary.
 	mapAR := usermem.AddrRange{0, ^usermem.Addr(usermem.PageSize - 1)}
@@ -173,6 +176,9 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 		}
 	}
 
+	t2 := time.Now()
+	fmt.Fprintf(os.Stdout, "Set addr configs, invariants checked %d ns\n", t2.Sub(t1).Nanoseconds())
+
 	// Since this checks ar.End and not mapAR.End, we will never map a pma that
 	// is not required.
 	for pseg.Ok() && pseg.Start() < ar.End {
@@ -183,11 +189,17 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 		if pma.needCOW {
 			perms.Write = false
 		}
+		t3 := time.Now()
 		if err := mm.as.MapFile(pmaMapAR.Start, pma.file, pseg.fileRangeOf(pmaMapAR), perms, precommit); err != nil {
 			return err
 		}
+		t4 := time.Now()
+		fmt.Fprintf(os.Stdout, "MapFile():\t\t\t\t%d ns\n", t4.Sub(t3).Nanoseconds())
+
 		pseg = pseg.NextSegment()
 	}
+	t5 := time.Now()
+	fmt.Fprintf(os.Stdout, "All segments mapped:\t\t%d ns\n", t5.Sub(t2).Nanoseconds())
 	return nil
 }
 
