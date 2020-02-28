@@ -16,6 +16,8 @@ package mm
 
 import (
 	"fmt"
+	"os"
+	"time"
 	mrand "math/rand"
 
 	"gvisor.dev/gvisor/pkg/abi/linux"
@@ -73,6 +75,7 @@ func (mm *MemoryManager) HandleUserFault(ctx context.Context, addr usermem.Addr,
 
 // MMap establishes a memory mapping.
 func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (usermem.Addr, error) {
+	t1 := time.Now()
 	if opts.Length == 0 {
 		return 0, syserror.EINVAL
 	}
@@ -81,6 +84,7 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 		return 0, syserror.ENOMEM
 	}
 	opts.Length = uint64(length)
+
 
 	if opts.Mappable != nil {
 		// Offset must be aligned.
@@ -106,6 +110,9 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 			opts.Mappable = m
 		}
 	}
+	t2 := time.Now()
+	fmt.Fprintf(os.Stdout, "Address Alignment + Mapping:\t\t%d ns\n", t2.Sub(t1).Nanoseconds())
+
 
 	if opts.Addr.RoundDown() != opts.Addr {
 		// MAP_FIXED requires addr to be page-aligned; non-fixed mappings
@@ -136,6 +143,8 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 		mm.mappingMu.Unlock()
 		return 0, err
 	}
+	t3 := time.Now()
+	fmt.Fprintf(os.Stdout, "VMA Creation:\t\t\t\t%d ns\n", t3.Sub(t2).Nanoseconds())
 
 	// TODO(jamieliu): In Linux, VM_LOCKONFAULT (which may be set on the new
 	// vma by mlockall(MCL_FUTURE|MCL_ONFAULT) => mm_struct::def_flags) appears
@@ -146,6 +155,8 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 	case opts.Precommit || opts.MLockMode == memmap.MLockEager:
 		// Get pmas and map with precommit as requested.
 		mm.populateVMAAndUnlock(ctx, vseg, ar, true)
+		t4 := time.Now()
+		fmt.Fprintf(os.Stdout, "populateVMAAndUnlock(precommit=true):\t%d ns\n", t4.Sub(t3).Nanoseconds())
 
 	case opts.Mappable == nil && length <= privateAllocUnit:
 		// NOTE(b/63077076, b/63360184): Get pmas and map eagerly in the hope
@@ -155,11 +166,17 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 		// to avoid needing to allocate large amounts of memory that we may
 		// subsequently need to checkpoint.
 		mm.populateVMAAndUnlock(ctx, vseg, ar, false)
+		t4 := time.Now()
+		fmt.Fprintf(os.Stdout, "populateVMAAndUnlock(precommit=false):\t%d ns\n", t4.Sub(t3).Nanoseconds())
+
 
 	default:
 		mm.mappingMu.Unlock()
+		fmt.Fprintf(os.Stdout, "Skipped mm.populateVMAAndUnlock()\n")
 	}
 
+	t5 := time.Now()
+	fmt.Fprintf(os.Stdout, "MMap():\t\t%d ns\n", t5.Sub(t1).Nanoseconds())
 	return ar.Start, nil
 }
 
@@ -227,10 +244,13 @@ func (mm *MemoryManager) populateVMAAndUnlock(ctx context.Context, vseg vmaItera
 		return
 	}
 
+	t1 := time.Now()
 	// mm.mappingMu doesn't need to be write-locked for getPMAsLocked, and it
 	// isn't needed at all for mapASLocked.
 	mm.mappingMu.DowngradeLock()
 	pseg, _, err := mm.getPMAsLocked(ctx, vseg, ar, usermem.NoAccess)
+	t2 := time.Now()
+	fmt.Fprintf(os.Stdout, "getPMAsLocked():\t\t\t%d ns\n", t2.Sub(t1).Nanoseconds())
 	mm.mappingMu.RUnlock()
 	if err != nil {
 		mm.activeMu.Unlock()
@@ -239,6 +259,8 @@ func (mm *MemoryManager) populateVMAAndUnlock(ctx context.Context, vseg vmaItera
 
 	mm.activeMu.DowngradeLock()
 	mm.mapASLocked(pseg, ar, precommit)
+	t3 := time.Now()
+	fmt.Fprintf(os.Stdout, "mapAsLocked()\t\t\t\t%d ns\n", t3.Sub(t2).Nanoseconds())
 	mm.activeMu.RUnlock()
 }
 

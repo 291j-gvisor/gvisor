@@ -17,6 +17,8 @@ package mm
 import (
 	"fmt"
 	"sync/atomic"
+	"os"
+	"time"
 
 	"gvisor.dev/gvisor/pkg/atomicbitops"
 	"gvisor.dev/gvisor/pkg/sentry/platform"
@@ -183,9 +185,13 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 		if pma.needCOW {
 			perms.Write = false
 		}
+		t1 := time.Now()
 		if err := mm.as.MapFile(pmaMapAR.Start, pma.file, pseg.fileRangeOf(pmaMapAR), perms, precommit); err != nil {
 			return err
 		}
+		t2 := time.Now()
+		fmt.Fprintf(os.Stdout, "MapFile():\t\t\t\t%d ns\n", t2.Sub(t1).Nanoseconds())
+
 		pseg = pseg.NextSegment()
 	}
 	return nil

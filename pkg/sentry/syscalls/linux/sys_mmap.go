@@ -15,6 +15,9 @@
 package linux
 
 import (
+	"os"
+	"time"
+	"fmt"
 	"bytes"
 
 	"gvisor.dev/gvisor/pkg/abi/linux"
@@ -37,6 +40,7 @@ func Brk(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallCo
 
 // Mmap implements linux syscall mmap(2).
 func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallControl, error) {
+	t1 := time.Now()
 	prot := args[2].Int()
 	flags := args[3].Int()
 	fd := args[4].Int()
@@ -68,6 +72,7 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 		GrowsDown: linux.MAP_GROWSDOWN&flags != 0,
 		Precommit: linux.MAP_POPULATE&flags != 0,
 	}
+
 	if linux.MAP_LOCKED&flags != 0 {
 		opts.MLockMode = memmap.MLockEager
 	}
@@ -101,6 +106,9 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 	}
 
 	rv, err := t.MemoryManager().MMap(t, opts)
+	t2 := time.Now()
+	elapsed := t2.Sub(t1).Nanoseconds()
+	fmt.Fprintf(os.Stdout, "Mmap():\t\t%d ns\n", elapsed)
 	return uintptr(rv), nil, err
 }
 
