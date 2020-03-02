@@ -121,6 +121,8 @@ const (
 	notifyDrain
 	notifyReset
 	notifyResetByPeer
+	// notifyAbort is a request for an expedited teardown.
+	notifyAbort
 	notifyKeepaliveChanged
 	notifyMSSChanged
 	// notifyTickleWorker is used to tickle the protocol main loop during a
@@ -785,6 +787,38 @@ func (e *endpoint) notifyProtocolGoroutine(n uint32) {
 	}
 }
 
+// Abort implements stack.TransportEndpoint.Abort.
+func (e *endpoint) Abort() {
+	// The abort notification is not processed synchronously, so no
+	// synchronization is needed.
+	//
+	// If the endpoint becomes connected after this check, we still close
+	// the endpoint. This worst case results in a slower abort.
+	//
+	// If the endpoint disconnected after the check, nothing needs to be
+	// done, so sending a notification which will potentially be ignored is
+	// fine.
+	//
+	// If the endpoint connecting finishes after the check, the endpoint
+	// is either in a connected state (where we would notifyAbort anyway),
+	// SYN-RECV (where we would also notifyAbort anyway), or in an error
+	// state where nothing is required and the notification can be safely
+	// ignored.
+	//
+	// Endpoints where a Close during connecting or SYN-RECV state would be
+	// problematic are set to state connecting before being registered (and
+	// thus possible to be Aborted). They are never available in initial
+	// state.
+	//
+	// Endpoints transitioning from initial to connecting state may be
+	// safely either closed or sent notifyAbort.
+	if s := e.EndpointState(); s == StateConnecting || s == StateSynRecv || s.connected() {
+		e.notifyProtocolGoroutine(notifyAbort)
+		return
+	}
+	e.Close()
+}
+
 // Close puts the endpoint in a closed state and frees all resources associated
 // with it. It must be called only once and with no other concurrent calls to
 // the endpoint.
@@ -829,9 +863,18 @@ func (e *endpoint) closeNoShutdown() {
 	// Either perform the local cleanup or kick the worker to make sure it
 	// knows it needs to cleanup.
 	tcpip.AddDanglingEndpoint(e)
-	if !e.workerRunning {
+	switch e.EndpointState() {
+	// Sockets in StateSynRecv state(passive connections) are closed when
+	// the handshake fails or if the listening socket is closed while
+	// handshake was in progress. In such cases the handshake goroutine
+	// is already gone by the time Close is called and we need to cleanup
+	// here.
+	case StateInitial, StateBound, StateSynRecv:
 		e.cleanupLocked()
-	} else {
+		e.setEndpointState(StateClose)
+	case StateError, StateClose:
+		// do nothing.
+	default:
 		e.workerCleanup = true
 		e.notifyProtocolGoroutine(notifyClose)
 	}
