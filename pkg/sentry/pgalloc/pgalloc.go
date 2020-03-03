@@ -385,6 +385,7 @@ func (f *MemoryFile) Destroy() {
 //
 // Preconditions: length must be page-aligned and non-zero.
 func (f *MemoryFile) Allocate(length uint64, kind usage.MemoryKind) (platform.FileRange, error) {
+	fmt.Println("Get into pgalloc - Allocate")
 	if length == 0 || length%usermem.PageSize != 0 {
 		panic(fmt.Sprintf("invalid allocation length: %#x", length))
 	}
@@ -512,7 +513,7 @@ func (f *MemoryFile) AllocateAndFill(length uint64, kind usage.MemoryKind, r saf
 	return fr, err
 }
 
-// fallocate(2) modes, defined in Linux's include/uapi/linux/falloc.h.
+// fallocate(2) modes, defined in Linux's include/uapi/linux/falloc.h.gui
 const (
 	_FALLOC_FL_KEEP_SIZE  = 1
 	_FALLOC_FL_PUNCH_HOLE = 2

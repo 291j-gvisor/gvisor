@@ -214,6 +214,7 @@ func (mm *MemoryManager) findLowestAvailableLocked(length, alignment uint64, bou
 
 // Preconditions: mm.mappingMu must be locked.
 func (mm *MemoryManager) findHighestAvailableLocked(length, alignment uint64, bounds usermem.AddrRange) (usermem.Addr, error) {
+	fmt.Println("get into find highest", length, alignment, bounds)
 	for gap := mm.vmas.UpperBoundGap(bounds.End); gap.Ok() && gap.End() > bounds.Start; gap = gap.PrevGap() {
 		if gr := gap.availableRange().Intersect(bounds); uint64(gr.Length()) >= length {
 			// Can we shift down to match the alignment?
@@ -224,7 +225,7 @@ func (mm *MemoryManager) findHighestAvailableLocked(length, alignment uint64, bo
 					return start - usermem.Addr(offset), nil
 				}
 			}
-
+			fmt.Println("exit find highest")
 			// Either aligned perfectly, or can't align it.
 			return start, nil
 		}

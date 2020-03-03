@@ -34,6 +34,7 @@ import (
 //
 // Preconditions: mm.as != nil.
 func (mm *MemoryManager) HandleUserFault(ctx context.Context, addr usermem.Addr, at usermem.AccessType, sp usermem.Addr) error {
+	fmt.Println("Get into pagefault handler")
 	ar, ok := addr.RoundDown().ToRange(usermem.PageSize)
 	if !ok {
 		return syserror.EFAULT
@@ -73,6 +74,7 @@ func (mm *MemoryManager) HandleUserFault(ctx context.Context, addr usermem.Addr,
 
 // MMap establishes a memory mapping.
 func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (usermem.Addr, error) {
+	fmt.Println("Get into MMap")
 	if opts.Length == 0 {
 		return 0, syserror.EINVAL
 	}
@@ -131,6 +133,7 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 	if opts.MLockMode < mm.defMLockMode {
 		opts.MLockMode = mm.defMLockMode
 	}
+	fmt.Println(opts)
 	vseg, ar, err := mm.createVMALocked(ctx, opts)
 	if err != nil {
 		mm.mappingMu.Unlock()
@@ -145,6 +148,7 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 	switch {
 	case opts.Precommit || opts.MLockMode == memmap.MLockEager:
 		// Get pmas and map with precommit as requested.
+		fmt.Println("get into precommit")
 		mm.populateVMAAndUnlock(ctx, vseg, ar, true)
 
 	case opts.Mappable == nil && length <= privateAllocUnit:
@@ -213,6 +217,7 @@ func (mm *MemoryManager) populateVMA(ctx context.Context, vseg vmaIterator, ar u
 //
 // Postconditions: mm.mappingMu will be unlocked.
 func (mm *MemoryManager) populateVMAAndUnlock(ctx context.Context, vseg vmaIterator, ar usermem.AddrRange, precommit bool) {
+	fmt.Println("Get into populateVMA")
 	// See populateVMA above for commentary.
 	if !vseg.ValuePtr().effectivePerms.Any() {
 		mm.mappingMu.Unlock()
