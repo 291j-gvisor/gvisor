@@ -1,4 +1,4 @@
-load("//tools:defs.bzl", "cc_library", "cc_test", "gtest", "select_system")
+load("//tools:defs.bzl", "cc_library", "cc_test", "gbenchmark", "gtest", "select_system")
 
 package(
     default_visibility = ["//:sandbox"],
@@ -260,6 +260,7 @@ cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/time",
         gtest,
+        gbenchmark,
     ],
 )
 
@@ -348,4 +349,10 @@ cc_library(
         ":posix_error",
         ":save_util",
     ],
+)
+
+cc_library(
+    name = "temp_umask",
+    testonly = 1,
+    hdrs = ["temp_umask.h"],
 )
