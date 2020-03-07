@@ -213,7 +213,6 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 		}
 		t4 := time.Now()
 		fmt.Fprintf(os.Stdout, "MapFile():\t\t\t\t%d ns\n", t4.Sub(t3).Nanoseconds())
-
 		pseg = pseg.NextSegment()
 	}
 	t5 := time.Now()
