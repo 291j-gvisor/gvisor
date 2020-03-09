@@ -110,7 +110,7 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 	rv, err := t.MemoryManager().MMap(t, opts)
 	t2 := time.Now()
 	elapsed := t2.Sub(t1).Nanoseconds()
-	fmt.Fprintf(os.Stdout, "Mmap():\t\t%d ns\n", elapsed)
+	fmt.Fprintf(os.Stdout, "Mmap:\t\t\t\t\t\t\t\t\t\t\t%d ns\n", elapsed)
 	return uintptr(rv), nil, err
 }
 

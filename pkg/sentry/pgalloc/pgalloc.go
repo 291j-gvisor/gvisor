@@ -642,9 +642,13 @@ func (f *MemoryFile) MapInternal(fr platform.FileRange, at usermem.AccessType) (
 		return seq, err
 	}
 	blocks := make([]safemem.Block, 0, chunks)
+
+	t1 := time.Now()
 	err := f.forEachMappingSlice(fr, func(bs []byte) {
 		blocks = append(blocks, safemem.BlockFromSafeSlice(bs))
 	})
+	t2 := time.Now()
+	fmt.Fprintf(os.Stdout, "Mmap=>MMap->populateVMAAndUnlock->mapASLocked->MapFile->MapInternal->Map a Slice:\t%d ns\n", t2.Sub(t1).Nanoseconds())
 	return safemem.BlockSeqFromSlice(blocks), err
 }
 

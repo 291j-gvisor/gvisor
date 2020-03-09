@@ -17,6 +17,7 @@ package ptrace
 import (
 	"fmt"
 	"os"
+	"time"
 	"runtime"
 	"syscall"
 
@@ -609,6 +610,8 @@ func (s *subprocess) MapFile(addr usermem.Addr, f platform.File, fr platform.Fil
 	if precommit {
 		flags |= syscall.MAP_POPULATE
 	}
+
+	t1 := time.Now()
 	_, err := s.syscall(
 		syscall.SYS_MMAP,
 		arch.SyscallArgument{Value: uintptr(addr)},
@@ -617,6 +620,9 @@ func (s *subprocess) MapFile(addr usermem.Addr, f platform.File, fr platform.Fil
 		arch.SyscallArgument{Value: uintptr(flags | syscall.MAP_SHARED | syscall.MAP_FIXED)},
 		arch.SyscallArgument{Value: uintptr(f.FD())},
 		arch.SyscallArgument{Value: uintptr(fr.Start)})
+
+	t2 := time.Now()
+	fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->MapFile->Host mmap\t\t\t%d ns\n", t2.Sub(t1).Nanoseconds())
 	return err
 }
 

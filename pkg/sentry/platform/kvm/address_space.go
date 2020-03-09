@@ -15,6 +15,10 @@
 package kvm
 
 import (
+	"fmt"
+	"os"
+	"time"
+
 	"sync/atomic"
 
 	"gvisor.dev/gvisor/pkg/atomicbitops"
@@ -168,6 +172,8 @@ func (as *addressSpace) MapFile(addr usermem.Addr, f platform.File, fr platform.
 	// We don't execute from application file-mapped memory, and guest page
 	// tables don't care if we have execute permission (but they do need pages
 	// to be readable).
+
+	t1 := time.Now()
 	bs, err := f.MapInternal(fr, usermem.AccessType{
 		Read:  at.Read || at.Execute || precommit,
 		Write: at.Write,
@@ -175,6 +181,8 @@ func (as *addressSpace) MapFile(addr usermem.Addr, f platform.File, fr platform.
 	if err != nil {
 		return err
 	}
+
+	t2 := time.Now()
 
 	// Map the mappings in the sentry's address space (guest physical memory)
 	// into the application's address space (guest virtual memory).
@@ -200,6 +208,9 @@ func (as *addressSpace) MapFile(addr usermem.Addr, f platform.File, fr platform.
 	if inv {
 		as.invalidate()
 	}
+	t3 := time.Now()
+	fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->MapFile->MapInternal\t%d ns\n", t2.Sub(t1).Nanoseconds())
+	fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->MapFile->MapInternal->Map guestPM to guestVM:\t%d ns\n", t3.Sub(t2).Nanoseconds())
 
 	return nil
 }

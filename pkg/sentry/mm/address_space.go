@@ -195,7 +195,7 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 	}
 
 	t2 := time.Now()
-	fmt.Fprintf(os.Stdout, "Set addr configs, invariants checked %d ns\n", t2.Sub(t1).Nanoseconds())
+	fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->Set addr configs, check invariants\t%d ns\n", t2.Sub(t1).Nanoseconds())
 
 	// Since this checks ar.End and not mapAR.End, we will never map a pma that
 	// is not required.
@@ -212,11 +212,11 @@ func (mm *MemoryManager) mapASLocked(pseg pmaIterator, ar usermem.AddrRange, pre
 			return err
 		}
 		t4 := time.Now()
-		fmt.Fprintf(os.Stdout, "MapFile():\t\t\t\t%d ns\n", t4.Sub(t3).Nanoseconds())
+		fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->MapFile\t\t\t\t\t%d ns\n", t4.Sub(t3).Nanoseconds())
 		pseg = pseg.NextSegment()
 	}
 	t5 := time.Now()
-	fmt.Fprintf(os.Stdout, "All segments mapped:\t\t%d ns\n", t5.Sub(t2).Nanoseconds())
+	fmt.Fprintf(os.Stdout, "Mmap->MMap->populateVMAAndUnlock->mapASLocked->All segments mapped\t\t\t%d ns\n", t5.Sub(t2).Nanoseconds())
 	return nil
 }
 
