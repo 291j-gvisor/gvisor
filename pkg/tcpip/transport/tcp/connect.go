@@ -624,17 +624,17 @@ func parseSynSegmentOptions(s *segment) header.TCPSynOptions {
 
 var optionPool = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, maxOptionSize)
+		return &[maxOptionSize]byte{}
 	},
 }
 
 func getOptions() []byte {
-	return optionPool.Get().([]byte)
+	return (*optionPool.Get().(*[maxOptionSize]byte))[:]
 }
 
 func putOptions(options []byte) {
 	// Reslice to full capacity.
-	optionPool.Put(options[0:cap(options)])
+	optionPool.Put(optionsToArray(options))
 }
 
 func makeSynOptions(opts header.TCPSynOptions) []byte {
@@ -1639,6 +1639,7 @@ func (e *endpoint) doTimeWait() (twReuse func()) {
 	const timeWaitDone = 3
 
 	s := sleep.Sleeper{}
+	defer s.Done()
 	s.AddWaker(&e.newSegmentWaker, newSegment)
 	s.AddWaker(&e.notificationWaker, notification)
 

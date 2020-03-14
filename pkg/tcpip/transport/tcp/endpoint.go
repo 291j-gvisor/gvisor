@@ -825,6 +825,7 @@ func (e *endpoint) Abort() {
 func (e *endpoint) Close() {
 	e.mu.Lock()
 	closed := e.closed
+	e.closed = true
 	e.mu.Unlock()
 	if closed {
 		return
@@ -833,13 +834,7 @@ func (e *endpoint) Close() {
 	// Issue a shutdown so that the peer knows we won't send any more data
 	// if we're connected, or stop accepting if we're listening.
 	e.Shutdown(tcpip.ShutdownWrite | tcpip.ShutdownRead)
-	e.closeNoShutdown()
-}
 
-// closeNoShutdown closes the endpoint without doing a full shutdown. This is
-// used when a connection needs to be aborted with a RST and we want to skip
-// a full 4 way TCP shutdown.
-func (e *endpoint) closeNoShutdown() {
 	e.mu.Lock()
 
 	// For listening sockets, we always release ports inline so that they
@@ -858,11 +853,8 @@ func (e *endpoint) closeNoShutdown() {
 		e.boundPortFlags = ports.Flags{}
 	}
 
-	// Mark endpoint as closed.
-	e.closed = true
 	// Either perform the local cleanup or kick the worker to make sure it
 	// knows it needs to cleanup.
-	tcpip.AddDanglingEndpoint(e)
 	switch e.EndpointState() {
 	// Sockets in StateSynRecv state(passive connections) are closed when
 	// the handshake fails or if the listening socket is closed while
@@ -876,6 +868,9 @@ func (e *endpoint) closeNoShutdown() {
 		// do nothing.
 	default:
 		e.workerCleanup = true
+		tcpip.AddDanglingEndpoint(e)
+		// Worker will remove the dangling endpoint when the endpoint
+		// goroutine terminates.
 		e.notifyProtocolGoroutine(notifyClose)
 	}
 
@@ -2117,10 +2112,13 @@ func (e *endpoint) Shutdown(flags tcpip.ShutdownFlags) *tcpip.Error {
 		// Close for write.
 		if (e.shutdownFlags & tcpip.ShutdownWrite) != 0 {
 			e.sndBufMu.Lock()
-
 			if e.sndClosed {
 				// Already closed.
 				e.sndBufMu.Unlock()
+				if e.EndpointState() == StateTimeWait {
+					e.mu.Unlock()
+					return tcpip.ErrNotConnected
+				}
 				break
 			}
 
