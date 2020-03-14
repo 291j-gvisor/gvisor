@@ -385,7 +385,7 @@ func (f *MemoryFile) Destroy() {
 //
 // Preconditions: length must be page-aligned and non-zero.
 func (f *MemoryFile) Allocate(length uint64, kind usage.MemoryKind) (platform.FileRange, error) {
-	fmt.Println("Get into pgalloc - Allocate")
+	//fmt.Println("Get into pgalloc - Allocate")
 	if length == 0 || length%usermem.PageSize != 0 {
 		panic(fmt.Sprintf("invalid allocation length: %#x", length))
 	}

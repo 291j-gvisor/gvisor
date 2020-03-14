@@ -414,6 +414,7 @@ func (f *FDTable) Get(fd int32) (*fs.File, FDFlags) {
 			if !file.TryIncRef() {
 				continue // Race caught.
 			}
+			fmt.Println("tryincref",file)
 			// Reference acquired.
 			return file, flags
 		}

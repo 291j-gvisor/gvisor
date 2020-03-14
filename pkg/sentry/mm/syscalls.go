@@ -16,8 +16,9 @@ package mm
 
 import (
 	"fmt"
+	//"time"
 	mrand "math/rand"
-
+	"github.com/dterei/gotsc"
 	"gvisor.dev/gvisor/pkg/abi/linux"
 	"gvisor.dev/gvisor/pkg/context"
 	"gvisor.dev/gvisor/pkg/sentry/kernel/auth"
@@ -34,7 +35,7 @@ import (
 //
 // Preconditions: mm.as != nil.
 func (mm *MemoryManager) HandleUserFault(ctx context.Context, addr usermem.Addr, at usermem.AccessType, sp usermem.Addr) error {
-	fmt.Println("Get into pagefault handler")
+	//fmt.Println("Get into pagefault handler")
 	ar, ok := addr.RoundDown().ToRange(usermem.PageSize)
 	if !ok {
 		return syserror.EFAULT
@@ -74,7 +75,7 @@ func (mm *MemoryManager) HandleUserFault(ctx context.Context, addr usermem.Addr,
 
 // MMap establishes a memory mapping.
 func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (usermem.Addr, error) {
-	fmt.Println("Get into MMap")
+	//fmt.Println("Get into MMap")
 	if opts.Length == 0 {
 		return 0, syserror.EINVAL
 	}
@@ -99,7 +100,11 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 			if opts.MappingIdentity != nil {
 				return 0, syserror.EINVAL
 			}
+			//start := time.Now()
 			m, err := NewSharedAnonMappable(opts.Length, pgalloc.MemoryFileProviderFromContext(ctx))
+			//end := time.Now()
+			//end.Sub(start)
+			//fmt.Println("NewSharedAnonMappable lasts:", end.Sub(start))
 			if err != nil {
 				return 0, err
 			}
@@ -133,8 +138,17 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 	if opts.MLockMode < mm.defMLockMode {
 		opts.MLockMode = mm.defMLockMode
 	}
-	fmt.Println(opts)
+	//start := time.Now()
+	start := gotsc.BenchStart()
 	vseg, ar, err := mm.createVMALocked(ctx, opts)
+	fmt.Println(ar)
+	end := gotsc.BenchEnd()
+	//_ = end-start-40
+	fmt.Println("1", end-start-40)
+	//end 9
+	//:= time.Now()
+	//end.Sub(start)
+	//fmt.Println("creatVMALocked lasts:", end.Sub(start))
 	if err != nil {
 		mm.mappingMu.Unlock()
 		return 0, err
@@ -148,7 +162,7 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 	switch {
 	case opts.Precommit || opts.MLockMode == memmap.MLockEager:
 		// Get pmas and map with precommit as requested.
-		fmt.Println("get into precommit")
+		//fmt.Println("get into precommit")
 		mm.populateVMAAndUnlock(ctx, vseg, ar, true)
 
 	case opts.Mappable == nil && length <= privateAllocUnit:
@@ -158,6 +172,7 @@ func (mm *MemoryManager) MMap(ctx context.Context, opts memmap.MMapOpts) (userme
 		// memmap.Mappable.Translate is unknown; and only for small mappings,
 		// to avoid needing to allocate large amounts of memory that we may
 		// subsequently need to checkpoint.
+		//time.Now()
 		mm.populateVMAAndUnlock(ctx, vseg, ar, false)
 
 	default:
@@ -217,7 +232,7 @@ func (mm *MemoryManager) populateVMA(ctx context.Context, vseg vmaIterator, ar u
 //
 // Postconditions: mm.mappingMu will be unlocked.
 func (mm *MemoryManager) populateVMAAndUnlock(ctx context.Context, vseg vmaIterator, ar usermem.AddrRange, precommit bool) {
-	fmt.Println("Get into populateVMA")
+	//fmt.Println("Get into populateVMA")
 	// See populateVMA above for commentary.
 	if !vseg.ValuePtr().effectivePerms.Any() {
 		mm.mappingMu.Unlock()
@@ -235,15 +250,36 @@ func (mm *MemoryManager) populateVMAAndUnlock(ctx context.Context, vseg vmaItera
 	// mm.mappingMu doesn't need to be write-locked for getPMAsLocked, and it
 	// isn't needed at all for mapASLocked.
 	mm.mappingMu.DowngradeLock()
+	//time.Now()
+	start := gotsc.BenchStart()
 	pseg, _, err := mm.getPMAsLocked(ctx, vseg, ar, usermem.NoAccess)
+	end := gotsc.BenchEnd()
+	//_ = end-start-40
+	fmt.Println("2", end-start-40)
+	//end := time.Now()
+	//end.Sub(start)
+	//fmt.Println("getVMALocked lasts:", end.Sub(start))
 	mm.mappingMu.RUnlock()
 	if err != nil {
 		mm.activeMu.Unlock()
 		return
 	}
-
+	//start = time.Now()
+	//for i:= 1; i< 100000; i++ {
+	//	fmt.Println("chishsishishsihsishis")
+	//}
+	//end = time.Now()
+	//fmt.Println("print lasts:", end.Sub(start)/100000)
 	mm.activeMu.DowngradeLock()
+	//start = time.Now()
+	start = gotsc.BenchStart()
 	mm.mapASLocked(pseg, ar, precommit)
+	end = gotsc.BenchEnd()
+	//_ = end-start-40
+	fmt.Println("3", end-start-40)
+	//end = time.Now()
+	//end.Sub(start)
+	//fmt.Println("mapASLocked lasts:", end.Sub(start))
 	mm.activeMu.RUnlock()
 }
 

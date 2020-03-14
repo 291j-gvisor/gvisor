@@ -119,6 +119,7 @@ go_library(
         "//pkg/syserror",
         "//pkg/tcpip/buffer",
         "//pkg/usermem",
+        "@com_github_dterei_gotsc//:go_default_library",
     ],
 )
 

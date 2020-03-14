@@ -16,6 +16,7 @@ package linux
 
 import (
 	"bytes"
+	"fmt"
 
 	"gvisor.dev/gvisor/pkg/abi/linux"
 	"gvisor.dev/gvisor/pkg/sentry/arch"
@@ -76,6 +77,7 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 	defer func() {
 		if opts.MappingIdentity != nil {
 			opts.MappingIdentity.DecRef()
+			fmt.Println("decref1 sys_mmap", opts.MappingIdentity)
 		}
 	}()
 
@@ -85,7 +87,11 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 		if file == nil {
 			return 0, nil, syserror.EBADF
 		}
-		defer file.DecRef()
+		defer func() {
+			fmt.Println("before decref2 sys_mmap", file)
+			file.DecRef()
+			fmt.Println("decref2 sys_mmap", file)
+		}()
 
 		flags := file.Flags()
 		// mmap unconditionally requires that the FD is readable.
@@ -100,9 +106,11 @@ func Mmap(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallC
 		if err := file.ConfigureMMap(t, &opts); err != nil {
 			return 0, nil, err
 		}
+		fmt.Println("after configureMMap", file, opts.MappingIdentity)
 	}
 
 	rv, err := t.MemoryManager().MMap(t, opts)
+	fmt.Println("after MMap", opts.MappingIdentity)
 	return uintptr(rv), nil, err
 }
 

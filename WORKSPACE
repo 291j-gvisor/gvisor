@@ -351,6 +351,12 @@ go_repository(
     version = "v1.0.0",
 )
 
+go_repository(
+    name = "com_github_dterei_gotsc",
+    commit = "e78f872945c6605086bf5f97fb4cf04ad9c08537",
+    importpath = "github.com/dterei/gotsc",
+)
+
 # System Call test dependencies.
 http_archive(
     name = "com_google_absl",

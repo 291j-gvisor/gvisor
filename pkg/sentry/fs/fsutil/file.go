@@ -15,8 +15,7 @@
 package fsutil
 
 import (
-	"io"
-
+	"fmt"
 	"gvisor.dev/gvisor/pkg/context"
 	"gvisor.dev/gvisor/pkg/sentry/arch"
 	"gvisor.dev/gvisor/pkg/sentry/fs"
@@ -24,6 +23,7 @@ import (
 	"gvisor.dev/gvisor/pkg/syserror"
 	"gvisor.dev/gvisor/pkg/usermem"
 	"gvisor.dev/gvisor/pkg/waiter"
+	"io"
 )
 
 // FileNoopRelease implements fs.FileOperations.Release for files that have no
@@ -212,7 +212,9 @@ func (FileNoMMap) ConfigureMMap(context.Context, *fs.File, *memmap.MMapOpts) err
 func GenericConfigureMMap(file *fs.File, m memmap.Mappable, opts *memmap.MMapOpts) error {
 	opts.Mappable = m
 	opts.MappingIdentity = file
+	fmt.Println("GenericConfigureMMap", opts.MappingIdentity)
 	file.IncRef()
+	fmt.Println("GenericConfigureMMap", opts.MappingIdentity)
 	return nil
 }
 

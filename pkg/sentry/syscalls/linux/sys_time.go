@@ -264,7 +264,7 @@ func clockNanosleepFor(t *kernel.Task, c ktime.Clock, dur time.Duration, rem use
 func Nanosleep(t *kernel.Task, args arch.SyscallArguments) (uintptr, *kernel.SyscallControl, error) {
 	addr := args[0].Pointer()
 	rem := args[1].Pointer()
-
+	fmt.Println("Nanosleep")
 	ts, err := copyTimespecIn(t, addr)
 	if err != nil {
 		return 0, nil, err

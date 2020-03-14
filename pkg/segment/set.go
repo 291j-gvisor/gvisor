@@ -91,7 +91,7 @@ const (
 //
 // +stateify savable
 type Set struct {
-	root node `state:".(*SegmentDataSlices)"`
+	root node `state:".(*SegmentDataSlices)"` // ???
 }
 
 // IsEmpty returns true if the set contains no segments.
@@ -325,13 +325,17 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 	if next.Ok() && next.Start() < r.End {
 		panic(fmt.Sprintf("new segment %v overlaps successor %v", r, next.Range()))
 	}
+	fmt.Println("insert prev next", prev, next)
 	if prev.Ok() && prev.End() == r.Start {
+		fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
+			fmt.Println("if#1",ok)
 			prev.SetEndUnchecked(r.End)
 			prev.SetValue(mval)
 			if next.Ok() && next.Start() == r.End {
 				val = mval
 				if mval, ok := (Functions{}).Merge(prev.Range(), val, next.Range(), next.Value()); ok {
+					fmt.Println("if#1 3rd if")
 					prev.SetEndUnchecked(next.End())
 					prev.SetValue(mval)
 					return s.Remove(next).PrevSegment()
@@ -341,7 +345,9 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		}
 	}
 	if next.Ok() && next.Start() == r.End {
+		fmt.Println("insert if#2")
 		if mval, ok := (Functions{}).Merge(r, val, next.Range(), next.Value()); ok {
+			fmt.Println(ok)
 			next.SetStartUnchecked(r.Start)
 			next.SetValue(mval)
 			return next

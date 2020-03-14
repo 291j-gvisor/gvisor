@@ -95,6 +95,7 @@ func (mm *MemoryManager) createVMALocked(ctx context.Context, opts memmap.MMapOp
 	// vma merging can drop the reference.
 	if opts.MappingIdentity != nil {
 		opts.MappingIdentity.IncRef()
+		fmt.Println("IncRef createVMALocked", opts.MappingIdentity)
 	}
 
 	// Finally insert the vma.
@@ -111,7 +112,7 @@ func (mm *MemoryManager) createVMALocked(ctx context.Context, opts memmap.MMapOp
 		id:             opts.MappingIdentity,
 		hint:           opts.Hint,
 	}
-
+	fmt.Println("insert arguments: ", vgap, ar, v)
 	vseg := mm.vmas.Insert(vgap, ar, v)
 	mm.usageAS += opts.Length
 	if v.isPrivateDataLocked() {
@@ -214,8 +215,11 @@ func (mm *MemoryManager) findLowestAvailableLocked(length, alignment uint64, bou
 
 // Preconditions: mm.mappingMu must be locked.
 func (mm *MemoryManager) findHighestAvailableLocked(length, alignment uint64, bounds usermem.AddrRange) (usermem.Addr, error) {
-	fmt.Println("get into find highest", length, alignment, bounds)
+	//fmt.Println("get into find highest", length, alignment, bounds)
+	fmt.Println(bounds, bounds.End-bounds.Start)
+	it := 0
 	for gap := mm.vmas.UpperBoundGap(bounds.End); gap.Ok() && gap.End() > bounds.Start; gap = gap.PrevGap() {
+		it += 1
 		if gr := gap.availableRange().Intersect(bounds); uint64(gr.Length()) >= length {
 			// Can we shift down to match the alignment?
 			start := gr.End - usermem.Addr(length)
@@ -225,8 +229,9 @@ func (mm *MemoryManager) findHighestAvailableLocked(length, alignment uint64, bo
 					return start - usermem.Addr(offset), nil
 				}
 			}
-			fmt.Println("exit find highest")
+			//fmt.Println("exit find highest")
 			// Either aligned perfectly, or can't align it.
+			fmt.Println(it)
 			return start, nil
 		}
 	}
@@ -443,6 +448,7 @@ func (vmaSetFunctions) Merge(ar1 usermem.AddrRange, vma1 vma, ar2 usermem.AddrRa
 		vma1.dontfork != vma2.dontfork ||
 		vma1.id != vma2.id ||
 		vma1.hint != vma2.hint {
+		fmt.Println("Merge Failed", vma1.id, vma2.id)
 		return vma{}, false
 	}
 
