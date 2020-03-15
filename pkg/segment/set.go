@@ -329,7 +329,7 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 	if prev.Ok() && prev.End() == r.Start {
 		fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
-			fmt.Println("if#1",ok)
+			fmt.Println("if#1", ok)
 			prev.SetEndUnchecked(r.End)
 			prev.SetValue(mval)
 			if next.Ok() && next.Start() == r.End {
@@ -642,6 +642,11 @@ type node struct {
 	keys     [maxDegree - 1]Range
 	values   [maxDegree - 1]Value
 	children [maxDegree]*node
+
+	// max gap length within this node
+	maxGap Key
+
+	//maxGapIndex int
 }
 
 // firstSegment returns the first segment in the subtree rooted by n.
@@ -1247,6 +1252,87 @@ func (gap GapIterator) NextGap() GapIterator {
 		return GapIterator{}
 	}
 	return seg.NextGap()
+}
+
+func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
+	// crawl up the tree if no large enough gap in current node or the current gap is the trailing one on leaf level
+	for gap.node != nil &&
+		(gap.node.maxGap < minSize || (!gap.node.hasChildren && gap.index == gap.node.nrSegments)) {
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	// no large enough gap throughout the whole set
+	if gap.node == nil {
+		return GapIterator{}
+	}
+	// move next
+	gap.index++
+	// iterates gap to next
+	for gap.index < gap.node.nrSegments {
+		//start := gap.node.keys[gap.index-1].End
+		//end := gap.node.keys[gap.index].Start
+		if gap.Range().Length() >= minSize {
+			return GapIterator{gap.node, gap.index}
+		} else if gap.node.hasChildren {
+			subtreeFirstGap := gap.node.children[gap.index].firstSegment().PrevGap()
+			return subtreeFirstGap.NextLargeEnoughGap(minSize)
+			//if gap.node.children[gap.index].maxGap >= minSize {
+			//	childFirstGap := GapIterator{gap.node.children[gap.index], 0}
+			//	return childFirstGap.NextLargeEnoughGap(minSize)
+			//}
+			//// todo: it seems the following part is redundant
+			//childEnd := gap.node.children[gap.index].lastSegment().End()
+			//if end-childEnd >= minSize {
+			//	return GapIterator{gap.node.children[gap.index],gap.node.children[gap.index].nrSegments}
+			//}
+		}
+		gap.index++
+	}
+	//// check the last gap
+	//if gap.index == gap.node.nrSegments && gap.Range().Length() >= minSize {
+	//	return GapIterator{gap.node, gap.index}
+	//}
+	return GapIterator{}
+}
+
+func (gap GapIterator) PrevLargeEnoughGap(minSize Key) GapIterator {
+	// crawl up the tree if no large enough gap in current node or the current gap is the trailing one
+	for gap.node != nil && (gap.node.maxGap < minSize || gap.index == gap.node.nrSegments) {
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	// no large enough gap throughout the whole set
+	if gap.node == nil {
+		return GapIterator{}
+	}
+	// move next
+	gap.index++
+	// iterates gap to next
+	for gap.index < gap.node.nrSegments {
+		start := gap.node.keys[gap.index-1].End
+		end := gap.node.keys[gap.index].Start
+		if gap.node.hasChildren {
+			childStart := gap.node.children[gap.index].firstSegment().Start()
+			if childStart-start >= minSize {
+				return GapIterator{gap.node, gap.index}
+			}
+			if gap.node.children[gap.index].maxGap >= minSize {
+				childFirstGap := GapIterator{gap.node.children[gap.index], 0}
+				return childFirstGap.NextLargeEnoughGap(minSize)
+			}
+			// todo: it seems the following part is redundant
+			childEnd := gap.node.children[gap.index].lastSegment().End()
+			if end-childEnd >= minSize {
+				return GapIterator{gap.node.children[gap.index], gap.node.children[gap.index].nrSegments}
+			}
+		} else if end-start >= minSize {
+			return GapIterator{gap.node, gap.index}
+		}
+		gap.index++
+	}
+	// check the last gap
+	if gap.index == gap.node.nrSegments && gap.Range().Length() >= minSize {
+		return GapIterator{gap.node, gap.index}
+	}
+	return GapIterator{}
 }
 
 // segmentBeforePosition returns the predecessor segment of the position given
