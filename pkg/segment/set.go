@@ -973,35 +973,28 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 	}
 }
 
-func (n *node) updateMaxGap() Key {
+// update maxgap bottom up from the current node
+func (n *node) updateMaxGap(newMaxGap Key) {
+	max := newMaxGap
 	if !n.hasChildren {
-		var max Key
 		for i := 0; i <= n.nrSegments; i++ {
 			currentGap := GapIterator{n, i}
-			if temp := currentGap.Range().Length; i == 0 || temp < max {
+			if temp := currentGap.Range().Length; i == 0 || temp > max {
 				max = temp
 			}
 		}
+	}
+	if n.parent != nil && n.parent.maxGap == n.maxGap {
 		n.maxGap = max
-		n.dirtyMaxGap = false
-		return max
+		var parentNewMax Key
+		for i, child := range n.parent.children {
+			if temp := child.maxGap; i == 0 || temp > parentNewMax {
+				parentNewMax = temp
+			}
+		}
+		n.parent.updateMaxGap(parentNewMax)
 	} else {
-		var max Key
-		for i := 0; i <= n.nrSegments; i++ {
-			currentChild := n.children[i]
-			var temp Key
-			if currentChild.dirtyMaxGap {
-				temp = currentChild.updateMaxGap()
-			} else {
-				temp = currentChild.maxGap
-			}
-			if i == 0 || temp < max {
-				max = temp
-			}
-		}
 		n.maxGap = max
-		n.dirtyMaxGap = false
-		return max
 	}
 }
 
