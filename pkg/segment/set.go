@@ -399,12 +399,12 @@ func (s *Set) InsertWithoutMergingUnchecked(gap GapIterator, r Range, val Value)
 	gap.node.keys[gap.index] = r
 	gap.node.values[gap.index] = val
 	gap.node.nrSegments++
-	gap.node.dirtyMaxGap = true
+	//gap.node.dirtyMaxGap = true
 	newseg := Iterator{gap.node, gap.index}
-	for gap.node.parent != nil && gap.node.dirtyMaxGap {
-		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
-	}
-	gap.node.updateMaxGap()
+	//for gap.node.parent != nil && gap.node.dirtyMaxGap {
+	//	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	//}
+	gap.node.updateMaxGap(0)
 	return newseg
 }
 
@@ -992,7 +992,9 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 				parentNewMax = temp
 			}
 		}
-		n.parent.updateMaxGap(parentNewMax)
+		if parentNewMax != n.parent.maxGap {
+			n.parent.updateMaxGap(parentNewMax)
+		}
 	} else {
 		n.maxGap = max
 	}
