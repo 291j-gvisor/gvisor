@@ -330,11 +330,11 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		//fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
 			//fmt.Println("if#1", ok)
-			if gap.Range().Length == prev.node.maxGap {
+			if gap.Range().Length() == prev.node.maxGap {
 				//update maxgap if the original max gap is inserted with new range
 				prev.SetEndUnchecked(r.End)
 				prev.SetValue(mval)
-				prev.node.updateMaxGap()
+				prev.node.updateMaxGap(0)
 			} else {
 				prev.SetEndUnchecked(r.End)
 				prev.SetValue(mval)
@@ -356,10 +356,10 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		//fmt.Println("insert if#2")
 		if mval, ok := (Functions{}).Merge(r, val, next.Range(), next.Value()); ok {
 			//fmt.Println(ok)
-			if gap.Range().Length == next.node.maxGap {
+			if gap.Range().Length() == next.node.maxGap {
 				next.SetStartUnchecked(r.Start)
 				next.SetValue(mval)
-				next.node.updateMaxGap()
+				next.node.updateMaxGap(0)
 			} else {
 				next.SetStartUnchecked(r.Start)
 				next.SetValue(mval)
@@ -979,7 +979,7 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 	if !n.hasChildren {
 		for i := 0; i <= n.nrSegments; i++ {
 			currentGap := GapIterator{n, i}
-			if temp := currentGap.Range().Length; i == 0 || temp > max {
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
 				max = temp
 			}
 		}
