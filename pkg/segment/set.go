@@ -325,19 +325,27 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 	if next.Ok() && next.Start() < r.End {
 		panic(fmt.Sprintf("new segment %v overlaps successor %v", r, next.Range()))
 	}
-	fmt.Println("insert prev next", prev, next)
+	//fmt.Println("insert prev next", prev, next)
 	if prev.Ok() && prev.End() == r.Start {
-		fmt.Println("insert if#1")
+		//fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
-			fmt.Println("if#1", ok)
-			prev.SetEndUnchecked(r.End)
-			prev.SetValue(mval)
+			//fmt.Println("if#1", ok)
+			if gap.Range().Length == prev.node.maxGap {
+				//update maxgap if the original max gap is inserted with new range
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+				prev.node.updateMaxGap()
+			} else {
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+			}
 			if next.Ok() && next.Start() == r.End {
 				val = mval
 				if mval, ok := (Functions{}).Merge(prev.Range(), val, next.Range(), next.Value()); ok {
-					fmt.Println("if#1 3rd if")
+					//fmt.Println("if#1 3rd if")
 					prev.SetEndUnchecked(next.End())
 					prev.SetValue(mval)
+					// todo: remove will update maxGap if necessary
 					return s.Remove(next).PrevSegment()
 				}
 			}
@@ -345,14 +353,21 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		}
 	}
 	if next.Ok() && next.Start() == r.End {
-		fmt.Println("insert if#2")
+		//fmt.Println("insert if#2")
 		if mval, ok := (Functions{}).Merge(r, val, next.Range(), next.Value()); ok {
-			fmt.Println(ok)
-			next.SetStartUnchecked(r.Start)
-			next.SetValue(mval)
+			//fmt.Println(ok)
+			if gap.Range().Length == next.node.maxGap {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+				next.node.updateMaxGap()
+			} else {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+			}
 			return next
 		}
 	}
+	// InsertWithoutMergingUnchecked will update maxGap
 	return s.InsertWithoutMergingUnchecked(gap, r, val)
 }
 
@@ -384,7 +399,13 @@ func (s *Set) InsertWithoutMergingUnchecked(gap GapIterator, r Range, val Value)
 	gap.node.keys[gap.index] = r
 	gap.node.values[gap.index] = val
 	gap.node.nrSegments++
-	return Iterator{gap.node, gap.index}
+	gap.node.dirtyMaxGap = true
+	newseg := Iterator{gap.node, gap.index}
+	for gap.node.parent != nil && gap.node.dirtyMaxGap {
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	gap.node.updateMaxGap()
+	return newseg
 }
 
 // Remove removes the given segment and returns an iterator to the vacated gap.
@@ -646,6 +667,7 @@ type node struct {
 	// max gap length within this node
 	maxGap Key
 
+	dirtyMaxGap bool
 	//maxGapIndex int
 }
 
@@ -730,6 +752,7 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		n.hasChildren = true
 		n.children[0] = left
 		n.children[1] = right
+		n.dirtyMaxGap, left.dirtyMaxGap, right.dirtyMaxGap = true, true, true
 		if gap.node != n {
 			return gap
 		}
@@ -757,6 +780,7 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 	}
 	n.parent.children[n.parentIndex+1] = sibling
 	n.parent.nrSegments++
+	n.parent.dirtyMaxGap, sibling.dirtyMaxGap = true, true
 	copy(sibling.keys[:minDegree-1], n.keys[minDegree:])
 	copy(sibling.values[:minDegree-1], n.values[minDegree:])
 	zeroValueSlice(n.values[minDegree-1:])
@@ -769,6 +793,7 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		}
 	}
 	n.nrSegments = minDegree - 1
+	n.dirtyMaxGap = true
 	// gap.node can't be n.parent because gaps are always in leaf nodes.
 	if gap.node != n {
 		return gap
@@ -945,6 +970,38 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 		p.nrSegments--
 		// This process robs p of one segment, so recurse into rebalancing p.
 		n = p
+	}
+}
+
+func (n *node) updateMaxGap() Key {
+	if !n.hasChildren {
+		var max Key
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length; i == 0 || temp < max {
+				max = temp
+			}
+		}
+		n.maxGap = max
+		n.dirtyMaxGap = false
+		return max
+	} else {
+		var max Key
+		for i := 0; i <= n.nrSegments; i++ {
+			currentChild := n.children[i]
+			var temp Key
+			if currentChild.dirtyMaxGap {
+				temp = currentChild.updateMaxGap()
+			} else {
+				temp = currentChild.maxGap
+			}
+			if i == 0 || temp < max {
+				max = temp
+			}
+		}
+		n.maxGap = max
+		n.dirtyMaxGap = false
+		return max
 	}
 }
 
@@ -1270,20 +1327,16 @@ func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
 	for gap.index < gap.node.nrSegments {
 		//start := gap.node.keys[gap.index-1].End
 		//end := gap.node.keys[gap.index].Start
-		if gap.Range().Length() >= minSize {
-			return GapIterator{gap.node, gap.index}
-		} else if gap.node.hasChildren {
+		if gap.node.hasChildren {
 			subtreeFirstGap := gap.node.children[gap.index].firstSegment().PrevGap()
+			if subtreeFirstGap.Range().Length() >= minSize {
+				return subtreeFirstGap
+			}
 			return subtreeFirstGap.NextLargeEnoughGap(minSize)
-			//if gap.node.children[gap.index].maxGap >= minSize {
-			//	childFirstGap := GapIterator{gap.node.children[gap.index], 0}
-			//	return childFirstGap.NextLargeEnoughGap(minSize)
-			//}
-			//// todo: it seems the following part is redundant
-			//childEnd := gap.node.children[gap.index].lastSegment().End()
-			//if end-childEnd >= minSize {
-			//	return GapIterator{gap.node.children[gap.index],gap.node.children[gap.index].nrSegments}
-			//}
+		} else {
+			if gap.Range().Length() >= minSize {
+				return gap
+			}
 		}
 		gap.index++
 	}
