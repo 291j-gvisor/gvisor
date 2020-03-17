@@ -1011,6 +1011,9 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 			}
 		}
 	}
+	if max == n.maxGap {
+		return
+	}
 	if n.parent != nil && n.parent.maxGap == n.maxGap {
 		n.maxGap = max
 		var parentNewMax Key
