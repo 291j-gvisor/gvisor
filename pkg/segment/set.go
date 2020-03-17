@@ -667,7 +667,7 @@ type node struct {
 	// max gap length within this node
 	maxGap Key
 
-	dirtyMaxGap bool
+	//dirtyMaxGap bool
 	//maxGapIndex int
 }
 
@@ -752,7 +752,10 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		n.hasChildren = true
 		n.children[0] = left
 		n.children[1] = right
-		n.dirtyMaxGap, left.dirtyMaxGap, right.dirtyMaxGap = true, true, true
+		//n.dirtyMaxGap, left.dirtyMaxGap, right.dirtyMaxGap = true, true, true
+		// update maxGap of left and right
+		left.updateLocalMaxGap()
+		right.updateLocalMaxGap()
 		if gap.node != n {
 			return gap
 		}
@@ -780,7 +783,7 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 	}
 	n.parent.children[n.parentIndex+1] = sibling
 	n.parent.nrSegments++
-	n.parent.dirtyMaxGap, sibling.dirtyMaxGap = true, true
+	//n.parent.dirtyMaxGap, sibling.dirtyMaxGap = true, true
 	copy(sibling.keys[:minDegree-1], n.keys[minDegree:])
 	copy(sibling.values[:minDegree-1], n.values[minDegree:])
 	zeroValueSlice(n.values[minDegree-1:])
@@ -793,7 +796,10 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		}
 	}
 	n.nrSegments = minDegree - 1
-	n.dirtyMaxGap = true
+	//n.dirtyMaxGap = true
+	// update maxGap of n and sibling
+	n.updateLocalMaxGap()
+	sibling.updateLocalMaxGap()
 	// gap.node can't be n.parent because gaps are always in leaf nodes.
 	if gap.node != n {
 		return gap
@@ -973,7 +979,8 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 	}
 }
 
-// update maxgap bottom up from the current node
+// update maxGap bottom up from the calling leaf
+// this call should only be made on leaf code with parameter as 0
 func (n *node) updateMaxGap(newMaxGap Key) {
 	max := newMaxGap
 	if !n.hasChildren {
@@ -997,6 +1004,28 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 		}
 	} else {
 		n.maxGap = max
+	}
+}
+
+// update maxGap of the calling node solely
+// no propagation to parent node
+func (n *node) updateLocalMaxGap() {
+	var max Key
+	if !n.hasChildren {
+		// leaf node iterates gaps
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	} else {
+		// non-leaf node iterates children
+		for i, child := range n.children {
+			if temp := child.maxGap; i == 0 || temp > max {
+				max = temp
+			}
+		}
 	}
 }
 
