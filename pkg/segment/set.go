@@ -1017,7 +1017,8 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 	if n.parent != nil && n.parent.maxGap == n.maxGap {
 		n.maxGap = max
 		var parentNewMax Key
-		for i, child := range n.parent.children {
+		for i := 0; i <= n.parent.nrSegments; i++ {
+			child := n.parent.children[i]
 			if temp := child.maxGap; i == 0 || temp > parentNewMax {
 				parentNewMax = temp
 			}
@@ -1044,7 +1045,8 @@ func (n *node) updateLocalMaxGap() {
 		}
 	} else {
 		// non-leaf node iterates children
-		for i, child := range n.children {
+		for i := 0; i <= n.parent.nrSegments; i++ {
+			child := n.parent.children[i]
 			if temp := child.maxGap; i == 0 || temp > max {
 				max = temp
 			}
