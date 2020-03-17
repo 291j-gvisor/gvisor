@@ -991,9 +991,9 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 		}
 		p.children[p.nrSegments] = nil
 		p.nrSegments--
-		// update maxGap of left and right, no need to change p
+		// update maxGap of left, no need to change p
+		// right is already meaningless
 		left.updateLocalMaxGap()
-		right.updateLocalMaxGap()
 		// This process robs p of one segment, so recurse into rebalancing p.
 		n = p
 	}
@@ -1052,6 +1052,7 @@ func (n *node) updateLocalMaxGap() {
 			}
 		}
 	}
+
 }
 
 // A Iterator is conceptually one of:
@@ -1089,6 +1090,10 @@ func (seg Iterator) Range() Range {
 // Start is equivalent to Range().Start, but should be preferred if only the
 // start of the range is needed.
 func (seg Iterator) Start() Key {
+	if seg.index >= 5 {
+		fmt.Println(seg.index, seg.node.nrSegments)
+		fmt.Println(seg.node.parent.String())
+	}
 	return seg.node.keys[seg.index].Start
 }
 
@@ -1460,6 +1465,7 @@ func segmentAfterPosition(n *node, i int) Iterator {
 		}
 		n, i = n.parent, n.parentIndex
 	}
+	//fmt.Println(n.nrSegments)
 	return Iterator{n, i}
 }
 
