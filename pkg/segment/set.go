@@ -432,6 +432,10 @@ func (s *Set) Remove(seg Iterator) GapIterator {
 	copy(seg.node.values[seg.index:], seg.node.values[seg.index+1:seg.node.nrSegments])
 	Functions{}.ClearValue(&seg.node.values[seg.node.nrSegments-1])
 	seg.node.nrSegments--
+	// update maxGap bottom up from the victim node
+	// the B-tree invariant might violated temporally
+	// but would be fixed in rebalanceAfterRemove
+	seg.node.updateMaxGap(0)
 	return seg.node.rebalanceAfterRemove(GapIterator{seg.node, seg.index})
 }
 
@@ -819,10 +823,13 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 	for {
 		if n.nrSegments >= minDegree-1 {
+			// n must be a leaf as guaranteed by merge
+			//n.updateMaxGap(0)
 			return gap
 		}
 		if n.parent == nil {
 			// Root is allowed to be deficient.
+			//n.updateLocalMaxGap()
 			return gap
 		}
 		// There's one other thing we can do before resorting to unsplitting.
@@ -863,12 +870,17 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 			}
 			n.nrSegments++
 			sibling.nrSegments--
+			// update maxgap of n and sibling solely
+			n.updateLocalMaxGap()
+			sibling.updateLocalMaxGap()
+			// todo: why this could happen?
 			if gap.node == sibling && gap.index == sibling.nrSegments {
 				return GapIterator{n, 0}
 			}
 			if gap.node == n {
 				return GapIterator{n, gap.index + 1}
 			}
+			// todo: why this could happen?
 			return gap
 		}
 		if sibling := n.nextSibling(); sibling != nil && sibling.nrSegments >= minDegree {
@@ -891,6 +903,10 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 			}
 			n.nrSegments++
 			sibling.nrSegments--
+			// update maxgap of n and sibling solely, no need to update p
+			n.updateLocalMaxGap()
+			sibling.updateLocalMaxGap()
+			// todo: why this could happen?
 			if gap.node == sibling {
 				if gap.index == 0 {
 					return GapIterator{n, n.nrSegments}
@@ -928,6 +944,7 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 				p.children[0] = nil
 				p.children[1] = nil
 			}
+			// no need to update maxGap of p as it's not changed
 			if gap.node == left {
 				return GapIterator{p, gap.index}
 			}
@@ -974,6 +991,9 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 		}
 		p.children[p.nrSegments] = nil
 		p.nrSegments--
+		// update maxGap of left and right, no need to change p
+		left.updateLocalMaxGap()
+		right.updateLocalMaxGap()
 		// This process robs p of one segment, so recurse into rebalancing p.
 		n = p
 	}
