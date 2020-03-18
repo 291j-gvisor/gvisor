@@ -1472,6 +1472,7 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 	gap.index++
 	// iterates gap to next
 	for gap.index <= gap.node.nrSegments {
+		//fmt.Println("???")
 		if gap.node.hasChildren {
 			if temp := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); temp.Ok() {
 				return temp
@@ -1481,6 +1482,7 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 				return gap
 			}
 		}
+		//fmt.Println("!!!")
 		gap.index++
 	}
 	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
