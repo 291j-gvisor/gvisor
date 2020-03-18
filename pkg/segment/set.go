@@ -1115,6 +1115,29 @@ func (n *node) searchFirstLargeEnoughGap(minSize Key) GapIterator {
 	panic(fmt.Sprintf("invalid maxGap in %v", n))
 }
 
+// search and return the last gap having at least minSize length
+// in the subtree rooted by n. if not found, return terminal gap
+func (n *node) searchLastLargeEnoughGap(minSize Key) GapIterator {
+	if n.maxGap < minSize {
+		return GapIterator{}
+	}
+	if n.hasChildren {
+		for i := n.nrSegments; i >= 0; i-- {
+			if temp := n.children[i].searchLastLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		}
+	} else {
+		for i := n.nrSegments; i >= 0; i-- {
+			currentGap := GapIterator{n, i}
+			if currentGap.Range().Length() >= minSize {
+				return currentGap
+			}
+		}
+	}
+	panic(fmt.Sprintf("invalid maxGap in %v", n))
+}
+
 func (n *node) checkMaxGap() error {
 	var max Key
 	if !n.hasChildren {
@@ -1472,7 +1495,6 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 	gap.index++
 	// iterates gap to next
 	for gap.index <= gap.node.nrSegments {
-		//fmt.Println("???")
 		if gap.node.hasChildren {
 			if temp := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); temp.Ok() {
 				return temp
@@ -1482,7 +1504,6 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 				return gap
 			}
 		}
-		//fmt.Println("!!!")
 		gap.index++
 	}
 	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
@@ -1495,44 +1516,47 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 }
 
 func (gap GapIterator) PrevLargeEnoughGap(minSize Key) GapIterator {
-	// crawl up the tree if no large enough gap in current node or the current gap is the trailing one
-	for gap.node != nil && (gap.node.maxGap < minSize || gap.index == gap.node.nrSegments) {
+	if gap.node != nil && gap.node.hasChildren && gap.index == 0 {
+		gap.node = gap.node.children[gap.index]
+		gap.index = gap.node.nrSegments
+		return gap.PrevLargeEnoughGapHelper(minSize)
+	}
+	return gap.PrevLargeEnoughGapHelper(minSize)
+}
+
+// precondition: gap is not the first gap of a non-leaf node
+func (gap GapIterator) PrevLargeEnoughGapHelper(minSize Key) GapIterator {
+	// crawl up the tree if no large enough gap in current node or the current gap is the first one on leaf level
+	for gap.node != nil &&
+		(gap.node.maxGap < minSize || (!gap.node.hasChildren && gap.index == 0)) {
 		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
 	}
 	// no large enough gap throughout the whole set
 	if gap.node == nil {
 		return GapIterator{}
 	}
-	// move next
-	gap.index++
-	// iterates gap to next
-	for gap.index < gap.node.nrSegments {
-		start := gap.node.keys[gap.index-1].End
-		end := gap.node.keys[gap.index].Start
+	// move prev
+	gap.index--
+	// iterates gap to prev
+	for gap.index >= 0 {
 		if gap.node.hasChildren {
-			childStart := gap.node.children[gap.index].firstSegment().Start()
-			if childStart-start >= minSize {
-				return GapIterator{gap.node, gap.index}
+			if temp := gap.node.children[gap.index].searchLastLargeEnoughGap(minSize); temp.Ok() {
+				return temp
 			}
-			if gap.node.children[gap.index].maxGap >= minSize {
-				childFirstGap := GapIterator{gap.node.children[gap.index], 0}
-				return childFirstGap.NextLargeEnoughGapHelper(minSize)
+		} else {
+			if gap.Range().Length() >= minSize {
+				return gap
 			}
-			// todo: it seems the following part is redundant
-			childEnd := gap.node.children[gap.index].lastSegment().End()
-			if end-childEnd >= minSize {
-				return GapIterator{gap.node.children[gap.index], gap.node.children[gap.index].nrSegments}
-			}
-		} else if end-start >= minSize {
-			return GapIterator{gap.node, gap.index}
 		}
-		gap.index++
+		gap.index--
 	}
-	// check the last gap
-	if gap.index == gap.node.nrSegments && gap.Range().Length() >= minSize {
-		return GapIterator{gap.node, gap.index}
+	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	if gap.node != nil && gap.index == 0 {
+		// gap is the first gap of a non-leaf node
+		// crawl up again
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
 	}
-	return GapIterator{}
+	return gap.NextLargeEnoughGapHelper(minSize)
 }
 
 // segmentBeforePosition returns the predecessor segment of the position given
