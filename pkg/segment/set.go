@@ -94,6 +94,10 @@ type Set struct {
 	root node `state:".(*SegmentDataSlices)"` // ???
 }
 
+func (s *Set) maxGap() Key {
+	return s.root.maxGap
+}
+
 // IsEmpty returns true if the set contains no segments.
 func (s *Set) IsEmpty() bool {
 	return s.root.nrSegments == 0
@@ -759,7 +763,9 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		//n.dirtyMaxGap, left.dirtyMaxGap, right.dirtyMaxGap = true, true, true
 		// update maxGap of left and right
 		left.updateLocalMaxGap()
+		//fmt.Println("left:", left.maxGap)
 		right.updateLocalMaxGap()
+		//fmt.Println("right:", right.maxGap)
 		if gap.node != n {
 			return gap
 		}
@@ -1011,6 +1017,7 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 			}
 		}
 	}
+	//fmt.Println("max:", max, n.maxGap)
 	if max == n.maxGap {
 		return
 	}
@@ -1023,6 +1030,7 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 				parentNewMax = temp
 			}
 		}
+		//fmt.Println("parent:", parentNewMax, n.parent.maxGap)
 		if parentNewMax != n.parent.maxGap {
 			n.parent.updateMaxGap(parentNewMax)
 		}
@@ -1045,14 +1053,14 @@ func (n *node) updateLocalMaxGap() {
 		}
 	} else {
 		// non-leaf node iterates children
-		for i := 0; i <= n.parent.nrSegments; i++ {
-			child := n.parent.children[i]
+		for i := 0; i <= n.nrSegments; i++ {
+			child := n.children[i]
 			if temp := child.maxGap; i == 0 || temp > max {
 				max = temp
 			}
 		}
 	}
-
+	n.maxGap = max
 }
 
 // A Iterator is conceptually one of:
@@ -1090,10 +1098,6 @@ func (seg Iterator) Range() Range {
 // Start is equivalent to Range().Start, but should be preferred if only the
 // start of the range is needed.
 func (seg Iterator) Start() Key {
-	if seg.index >= 5 {
-		fmt.Println(seg.index, seg.node.nrSegments)
-		fmt.Println(seg.node.parent.String())
-	}
 	return seg.node.keys[seg.index].Start
 }
 
@@ -1510,7 +1514,7 @@ func (n *node) writeDebugString(buf *bytes.Buffer, prefix string) {
 			child.writeDebugString(buf, fmt.Sprintf("%s- % 3d ", prefix, i))
 		}
 		buf.WriteString(prefix)
-		buf.WriteString(fmt.Sprintf("- % 3d: %v => %v\n", i, n.keys[i], n.values[i]))
+		buf.WriteString(fmt.Sprintf("- % 3d: %v => %v, maxGap: %d\n", i, n.keys[i], n.values[i], n.maxGap))
 	}
 	if child := n.children[n.nrSegments]; child != nil {
 		child.writeDebugString(buf, fmt.Sprintf("%s- % 3d ", prefix, n.nrSegments))
