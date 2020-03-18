@@ -334,7 +334,11 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		//fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
 			//fmt.Println("if#1", ok)
-			if gap.Range().Length() == prev.node.maxGap {
+			if prev.node.hasChildren {
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+				gap.node.updateMaxGap(0)
+			} else if gap.Range().Length() == prev.node.maxGap {
 				//update maxgap if the original max gap is inserted with new range
 				prev.SetEndUnchecked(r.End)
 				prev.SetValue(mval)
@@ -360,7 +364,11 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		//fmt.Println("insert if#2")
 		if mval, ok := (Functions{}).Merge(r, val, next.Range(), next.Value()); ok {
 			//fmt.Println(ok)
-			if gap.Range().Length() == next.node.maxGap {
+			if next.node.hasChildren {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+				gap.node.updateMaxGap(0)
+			} else if gap.Range().Length() == next.node.maxGap {
 				next.SetStartUnchecked(r.Start)
 				next.SetValue(mval)
 				next.node.updateMaxGap(0)
