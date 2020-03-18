@@ -1556,7 +1556,7 @@ func (gap GapIterator) PrevLargeEnoughGapHelper(minSize Key) GapIterator {
 		// crawl up again
 		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
 	}
-	return gap.NextLargeEnoughGapHelper(minSize)
+	return gap.PrevLargeEnoughGapHelper(minSize)
 }
 
 // segmentBeforePosition returns the predecessor segment of the position given

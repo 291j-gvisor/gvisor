@@ -284,10 +284,6 @@ func TestNextLargeEnoughGap(t *testing.T) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
-		//if err := s.checkMaxGap(); err != nil {
-		//	t.Errorf("When inserting %d: %v", j, err)
-		//	break
-		//}
 	}
 	shuffle(order)
 	order = order[:testSize/2]
@@ -298,10 +294,6 @@ func TestNextLargeEnoughGap(t *testing.T) {
 		}
 		//temprange := seg.Range()
 		s.Remove(seg)
-		//if err := s.checkMaxGap(); err != nil {
-		//	t.Errorf("When removing %v: %v", temprange, err)
-		//	break
-		//}
 	}
 	//t.Logf("Set contents:\n%v", &s)
 	minSize := 7
@@ -331,6 +323,66 @@ func TestNextLargeEnoughGap(t *testing.T) {
 	}
 	end = time.Now()
 	t.Logf("NextGap takes %v", end.Sub(start))
+	if !Equal(gaparr2, gaparr1) {
+		t.Errorf("Search result not correct, got: %v, wanted: %v", gaparr1, gaparr2)
+	}
+	if t.Failed() {
+		//t.Logf("Set contents:\n%v", &s)
+		//t.FailNow()
+	}
+}
+
+func TestPrevLargeEnoughGap(t *testing.T) {
+	var s Set
+	order := randIntervalPermutation(testSize * 2)
+	order = order[:testSize]
+	rand.Seed(time.Now().UnixNano())
+	for i, j := range order {
+		//t.Logf("Set contents:\n%v", &s)
+		//if !s.Add(Range{j, j + 1}, j+valueOffset) {
+		if !s.Add(Range{j, j + rand.Intn(9) + 1}, j+valueOffset) {
+			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
+			break
+		}
+	}
+	shuffle(order)
+	order = order[:testSize/2]
+	for _, j := range order {
+		seg := s.FindSegment(j)
+		if !seg.Ok() {
+			continue
+		}
+		//temprange := seg.Range()
+		s.Remove(seg)
+	}
+	//t.Logf("Set contents:\n%v", &s)
+	minSize := 7
+	var gaparr1 []int
+	//gap := s.LowerBoundGap(0)
+	//t.Logf("gap %v", gap.Range())
+	//gap = gap.NextLargeEnoughGap(minSize)
+	//t.Logf("gap %v", gap.Range())
+	start := time.Now()
+	for gap := s.UpperBoundGap(2000020); gap.Ok(); gap = gap.PrevLargeEnoughGap(minSize) {
+		//t.Logf("gap %v", gap.Range())
+		if gap.Range().Length() < minSize {
+			t.Errorf("PrevLargeEnoughGap wrong, gap length %d, wanted %d", gap.Range().Length(), minSize)
+		} else {
+			gaparr1 = append(gaparr1, gap.Range().Start)
+		}
+	}
+	end := time.Now()
+	t.Logf("PrevLargeEnoughGap takes %v", end.Sub(start))
+	var gaparr2 []int
+	start = time.Now()
+	for gap := s.UpperBoundGap(2000020); gap.Ok(); gap = gap.PrevGap() {
+		//t.Logf("Nextgap %v", gap.Range())
+		if gap.Range().Length() >= minSize {
+			gaparr2 = append(gaparr2, gap.Range().Start)
+		}
+	}
+	end = time.Now()
+	t.Logf("PrevGap takes %v", end.Sub(start))
 	if !Equal(gaparr2, gaparr1) {
 		t.Errorf("Search result not correct, got: %v, wanted: %v", gaparr1, gaparr2)
 	}
