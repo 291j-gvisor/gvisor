@@ -1092,6 +1092,29 @@ func (n *node) updateLocalMaxGap() {
 	n.maxGap = max
 }
 
+// search and return the first gap having at least minSize length
+// in the subtree rooted by n. if not found, return terminal gap
+func (n *node) searchFirstLargeEnoughGap(minSize Key) GapIterator {
+	if n.maxGap < minSize {
+		return GapIterator{}
+	}
+	if n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			if temp := n.children[i].searchFirstLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		}
+	} else {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if currentGap.Range().Length() >= minSize {
+				return currentGap
+			}
+		}
+	}
+	panic(fmt.Sprintf("invalid maxGap in %v", n))
+}
+
 func (n *node) checkMaxGap() error {
 	var max Key
 	if !n.hasChildren {
@@ -1426,6 +1449,16 @@ func (gap GapIterator) NextGap() GapIterator {
 }
 
 func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
+	if gap.node != nil && gap.node.hasChildren && gap.index == gap.node.nrSegments {
+		gap.node = gap.node.children[gap.index]
+		gap.index = 0
+		return gap.NextLargeEnoughGapHelper(minSize)
+	}
+	return gap.NextLargeEnoughGapHelper(minSize)
+}
+
+// precondition: gap is not the trailing gap of a non-leaf node
+func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 	// crawl up the tree if no large enough gap in current node or the current gap is the trailing one on leaf level
 	for gap.node != nil &&
 		(gap.node.maxGap < minSize || (!gap.node.hasChildren && gap.index == gap.node.nrSegments)) {
@@ -1438,15 +1471,11 @@ func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
 	// move next
 	gap.index++
 	// iterates gap to next
-	for gap.index < gap.node.nrSegments {
-		//start := gap.node.keys[gap.index-1].End
-		//end := gap.node.keys[gap.index].Start
+	for gap.index <= gap.node.nrSegments {
 		if gap.node.hasChildren {
-			subtreeFirstGap := gap.node.children[gap.index].firstSegment().PrevGap()
-			if subtreeFirstGap.Range().Length() >= minSize {
-				return subtreeFirstGap
+			if temp := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); temp.Ok() {
+				return temp
 			}
-			return subtreeFirstGap.NextLargeEnoughGap(minSize)
 		} else {
 			if gap.Range().Length() >= minSize {
 				return gap
@@ -1454,11 +1483,13 @@ func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
 		}
 		gap.index++
 	}
-	//// check the last gap
-	//if gap.index == gap.node.nrSegments && gap.Range().Length() >= minSize {
-	//	return GapIterator{gap.node, gap.index}
-	//}
-	return GapIterator{}
+	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	if gap.node != nil && gap.index == gap.node.nrSegments {
+		// gap is the trailing gap of a non-leaf node
+		// crawl up again
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	return gap.NextLargeEnoughGapHelper(minSize)
 }
 
 func (gap GapIterator) PrevLargeEnoughGap(minSize Key) GapIterator {
@@ -1483,7 +1514,7 @@ func (gap GapIterator) PrevLargeEnoughGap(minSize Key) GapIterator {
 			}
 			if gap.node.children[gap.index].maxGap >= minSize {
 				childFirstGap := GapIterator{gap.node.children[gap.index], 0}
-				return childFirstGap.NextLargeEnoughGap(minSize)
+				return childFirstGap.NextLargeEnoughGapHelper(minSize)
 			}
 			// todo: it seems the following part is redundant
 			childEnd := gap.node.children[gap.index].lastSegment().End()
