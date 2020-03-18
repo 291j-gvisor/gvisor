@@ -94,8 +94,8 @@ type Set struct {
 	root node `state:".(*SegmentDataSlices)"` // ???
 }
 
-func (s *Set) maxGap() Key {
-	return s.root.maxGap
+func (s *Set) checkMaxGap() error {
+	return s.root.checkMaxGap()
 }
 
 // IsEmpty returns true if the set contains no segments.
@@ -430,6 +430,8 @@ func (s *Set) Remove(seg Iterator) GapIterator {
 		// overlap.
 		seg.SetRangeUnchecked(victim.Range())
 		seg.SetValue(victim.Value())
+		sibling := seg.NextSegment()
+		sibling.node.updateMaxGap(0)
 		return s.Remove(victim).NextGap()
 	}
 	copy(seg.node.keys[seg.index:], seg.node.keys[seg.index+1:seg.node.nrSegments])
@@ -1020,22 +1022,41 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 	//fmt.Println("max:", max, n.maxGap)
 	if max == n.maxGap {
 		return
-	}
-	if n.parent != nil && n.parent.maxGap == n.maxGap {
+	} else if max > n.maxGap {
 		n.maxGap = max
-		var parentNewMax Key
-		for i := 0; i <= n.parent.nrSegments; i++ {
-			child := n.parent.children[i]
-			if temp := child.maxGap; i == 0 || temp > parentNewMax {
-				parentNewMax = temp
-			}
+		if n.parent != nil && n.parent.maxGap < n.maxGap {
+			n.parent.updateMaxGap(max)
 		}
-		//fmt.Println("parent:", parentNewMax, n.parent.maxGap)
-		if parentNewMax != n.parent.maxGap {
-			n.parent.updateMaxGap(parentNewMax)
-		}
+		//if n.parent != nil && n.parent.maxGap == n.maxGap {
+		//	n.maxGap = max
+		//	n.parent.updateMaxGap(max)
+		//} else if n.parent != nil {
+		//	if max > n.parent.maxGap {
+		//		n.maxGap = max
+		//		n.parent.updateMaxGap(max)
+		//	} else {
+		//		n.maxGap = max
+		//	}
+		//} else {
+		//	n.maxGap = max
+		//}
 	} else {
-		n.maxGap = max
+		if n.parent != nil && n.parent.maxGap == n.maxGap {
+			n.maxGap = max
+			var parentNewMax Key
+			for i := 0; i <= n.parent.nrSegments; i++ {
+				child := n.parent.children[i]
+				if temp := child.maxGap; i == 0 || temp > parentNewMax {
+					parentNewMax = temp
+				}
+			}
+			//fmt.Println("parent:", parentNewMax, n.parent.maxGap)
+			if parentNewMax != n.parent.maxGap {
+				n.parent.updateMaxGap(parentNewMax)
+			}
+		} else {
+			n.maxGap = max
+		}
 	}
 }
 
@@ -1052,7 +1073,7 @@ func (n *node) updateLocalMaxGap() {
 			}
 		}
 	} else {
-		// non-leaf node iterates children
+		// non-leaf node iterates its children
 		for i := 0; i <= n.nrSegments; i++ {
 			child := n.children[i]
 			if temp := child.maxGap; i == 0 || temp > max {
@@ -1061,6 +1082,33 @@ func (n *node) updateLocalMaxGap() {
 		}
 	}
 	n.maxGap = max
+}
+
+func (n *node) checkMaxGap() error {
+	var max Key
+	if !n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	} else {
+		for i := 0; i <= n.nrSegments; i++ {
+			child := n.children[i]
+			if err := child.checkMaxGap(); err != nil {
+				return err
+			}
+			if temp := child.maxGap; i == 0 || temp > max {
+				max = temp
+			}
+		}
+	}
+	if max == n.maxGap {
+		return nil
+	} else {
+		return fmt.Errorf("maxGap wrong in node\n%vexpected: %d got: %d", n, max, n.maxGap)
+	}
 }
 
 // A Iterator is conceptually one of:
