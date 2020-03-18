@@ -338,7 +338,7 @@ func (f *FDTable) NewFDVFS2(ctx context.Context, minfd int32, file *vfs.FileDesc
 		fd = f.next
 	}
 	for fd < end {
-		if d, _, _ := f.get(fd); d == nil {
+		if d, _, _ := f.getVFS2(fd); d == nil {
 			f.setVFS2(fd, file, flags)
 			if fd == f.next {
 				// Update next search start position.
@@ -536,7 +536,9 @@ func (f *FDTable) Remove(fd int32) (*fs.File, *vfs.FileDescription) {
 	case orig2 != nil:
 		orig2.IncRef()
 	}
-	f.setAll(fd, nil, nil, FDFlags{}) // Zap entry.
+	if orig != nil || orig2 != nil {
+		f.setAll(fd, nil, nil, FDFlags{}) // Zap entry.
+	}
 	return orig, orig2
 }
 
