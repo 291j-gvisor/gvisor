@@ -29,7 +29,7 @@ const (
 	//
 	// Note that because checkSet is called between each insertion/removal in
 	// some tests that use it, tests may be quadratic in testSize.
-	testSize = 100000
+	testSize = 8000
 	// valueOffset is the difference between the value and start of test
 	// segments.
 	valueOffset = 100000
@@ -95,17 +95,13 @@ func countSegmentsIn(s *Set) int {
 	return count
 }
 
-func TestAddRandom(t *testing.T) {
+func TestAddRandomWithRandomInterval(t *testing.T) {
 	var s Set
 	order := randIntervalPermutation(testSize)
 	//rand.Seed(time.Now().UnixNano())
-	//order := [5]int{10, 12, 11, 14, 13}
-	//fmt.Println(order)
 	var nrInsertions int
 	for i, j := range order {
-		//if !s.Add(Range{j, j + 1}, j+valueOffset) {
 		if !s.AddWithoutMerging(Range{j, j + rand.Intn(9) + 1}, j+valueOffset) {
-			//if !s.AddWithoutMerging(Range{j, j + 10}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -126,7 +122,6 @@ func TestAddRandom(t *testing.T) {
 		t.Logf("Insertion order: %v", order[:nrInsertions])
 		t.Logf("Set contents:\n%v", &s)
 	}
-	//t.Logf("Set contents:\n%v", &s)
 }
 
 func TestAddRandomWithMerge(t *testing.T) {
