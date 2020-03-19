@@ -726,11 +726,11 @@ func (n *node) nextSibling() *node {
 // required for insertion, and returns an updated iterator to the position
 // represented by gap.
 func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
-	if n.parent != nil {
-		gap = n.parent.rebalanceBeforeInsert(gap)
-	}
 	if n.nrSegments < maxDegree-1 {
 		return gap
+	}
+	if n.parent != nil {
+		gap = n.parent.rebalanceBeforeInsert(gap)
 	}
 	if n.parent == nil {
 		// n is root. Move all segments before and after n's median segment
