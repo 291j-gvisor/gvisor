@@ -195,6 +195,7 @@ func (mm *MemoryManager) applicationAddrRange() usermem.AddrRange {
 
 // Preconditions: mm.mappingMu must be locked.
 func (mm *MemoryManager) findLowestAvailableLocked(length, alignment uint64, bounds usermem.AddrRange) (usermem.Addr, error) {
+	// use new function to speed up the search
 	//for gap := mm.vmas.LowerBoundGap(bounds.Start); gap.Ok() && gap.Start() < bounds.End; gap = gap.NextGap() {
 	for gap := mm.vmas.LowerBoundGap(bounds.Start); gap.Ok() && gap.Start() < bounds.End; gap = gap.NextLargeEnoughGap(usermem.Addr(length)) {
 		if gr := gap.availableRange().Intersect(bounds); uint64(gr.Length()) >= length {
@@ -215,6 +216,7 @@ func (mm *MemoryManager) findLowestAvailableLocked(length, alignment uint64, bou
 
 // Preconditions: mm.mappingMu must be locked.
 func (mm *MemoryManager) findHighestAvailableLocked(length, alignment uint64, bounds usermem.AddrRange) (usermem.Addr, error) {
+	// use new function to speed up the search
 	//for gap := mm.vmas.UpperBoundGap(bounds.End); gap.Ok() && gap.End() > bounds.Start; gap = gap.PrevGap() {
 	for gap := mm.vmas.UpperBoundGap(bounds.End); gap.Ok() && gap.End() > bounds.Start; gap = gap.PrevLargeEnoughGap(usermem.Addr(length)) {
 		if gr := gap.availableRange().Intersect(bounds); uint64(gr.Length()) >= length {
