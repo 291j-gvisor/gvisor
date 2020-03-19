@@ -24,8 +24,8 @@ package segment
 //)
 
 const (
-	maxInt = 2000020
-	minInt = 0
+	maxInt = 2147483647
+	minInt = -2147483648
 )
 
 type setFunctions struct{}
