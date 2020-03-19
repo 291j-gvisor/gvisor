@@ -16,9 +16,16 @@ package segment
 
 // Basic numeric constants that we define because the math package doesn't.
 // TODO(nlacasse): These should be Math.MaxInt64/MinInt64?
+// TODO: this is commented because the return result on my computer is obviously not an int
+
+//const (
+//	maxInt = int(^uint(0) >> 1)
+//	minInt = -maxInt - 1
+//)
+
 const (
-	maxInt = int(^uint(0) >> 1)
-	minInt = -maxInt - 1
+	maxInt = 2000020
+	minInt = 0
 )
 
 type setFunctions struct{}

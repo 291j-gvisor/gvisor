@@ -91,7 +91,11 @@ const (
 //
 // +stateify savable
 type Set struct {
-	root node `state:".(*SegmentDataSlices)"`
+	root node `state:".(*SegmentDataSlices)"` // ???
+}
+
+func (s *Set) checkMaxGap() error {
+	return s.root.checkMaxGap()
 }
 
 // IsEmpty returns true if the set contains no segments.
@@ -325,15 +329,31 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 	if next.Ok() && next.Start() < r.End {
 		panic(fmt.Sprintf("new segment %v overlaps successor %v", r, next.Range()))
 	}
+	//fmt.Println("insert prev next", prev, next)
 	if prev.Ok() && prev.End() == r.Start {
+		//fmt.Println("insert if#1")
 		if mval, ok := (Functions{}).Merge(prev.Range(), prev.Value(), r, val); ok {
-			prev.SetEndUnchecked(r.End)
-			prev.SetValue(mval)
+			//fmt.Println("if#1", ok)
+			if prev.node.hasChildren {
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+				gap.node.updateMaxGap(0)
+			} else if gap.Range().Length() == prev.node.maxGap {
+				//update maxgap if the original max gap is inserted with new range
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+				prev.node.updateMaxGap(0)
+			} else {
+				prev.SetEndUnchecked(r.End)
+				prev.SetValue(mval)
+			}
 			if next.Ok() && next.Start() == r.End {
 				val = mval
 				if mval, ok := (Functions{}).Merge(prev.Range(), val, next.Range(), next.Value()); ok {
+					//fmt.Println("if#1 3rd if")
 					prev.SetEndUnchecked(next.End())
 					prev.SetValue(mval)
+					// todo: remove will update maxGap if necessary
 					return s.Remove(next).PrevSegment()
 				}
 			}
@@ -341,12 +361,25 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 		}
 	}
 	if next.Ok() && next.Start() == r.End {
+		//fmt.Println("insert if#2")
 		if mval, ok := (Functions{}).Merge(r, val, next.Range(), next.Value()); ok {
-			next.SetStartUnchecked(r.Start)
-			next.SetValue(mval)
+			//fmt.Println(ok)
+			if next.node.hasChildren {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+				gap.node.updateMaxGap(0)
+			} else if gap.Range().Length() == next.node.maxGap {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+				next.node.updateMaxGap(0)
+			} else {
+				next.SetStartUnchecked(r.Start)
+				next.SetValue(mval)
+			}
 			return next
 		}
 	}
+	// InsertWithoutMergingUnchecked will update maxGap
 	return s.InsertWithoutMergingUnchecked(gap, r, val)
 }
 
@@ -378,7 +411,13 @@ func (s *Set) InsertWithoutMergingUnchecked(gap GapIterator, r Range, val Value)
 	gap.node.keys[gap.index] = r
 	gap.node.values[gap.index] = val
 	gap.node.nrSegments++
-	return Iterator{gap.node, gap.index}
+	//gap.node.dirtyMaxGap = true
+	newseg := Iterator{gap.node, gap.index}
+	//for gap.node.parent != nil && gap.node.dirtyMaxGap {
+	//	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	//}
+	gap.node.updateMaxGap(0)
+	return newseg
 }
 
 // Remove removes the given segment and returns an iterator to the vacated gap.
@@ -399,12 +438,18 @@ func (s *Set) Remove(seg Iterator) GapIterator {
 		// overlap.
 		seg.SetRangeUnchecked(victim.Range())
 		seg.SetValue(victim.Value())
+		sibling := seg.NextSegment()
+		sibling.node.updateMaxGap(0)
 		return s.Remove(victim).NextGap()
 	}
 	copy(seg.node.keys[seg.index:], seg.node.keys[seg.index+1:seg.node.nrSegments])
 	copy(seg.node.values[seg.index:], seg.node.values[seg.index+1:seg.node.nrSegments])
 	Functions{}.ClearValue(&seg.node.values[seg.node.nrSegments-1])
 	seg.node.nrSegments--
+	// update maxGap bottom up from the victim node
+	// the B-tree invariant might violated temporally
+	// but would be fixed in rebalanceAfterRemove
+	seg.node.updateMaxGap(0)
 	return seg.node.rebalanceAfterRemove(GapIterator{seg.node, seg.index})
 }
 
@@ -636,6 +681,12 @@ type node struct {
 	keys     [maxDegree - 1]Range
 	values   [maxDegree - 1]Value
 	children [maxDegree]*node
+
+	// max gap length within this node
+	maxGap Key
+
+	//dirtyMaxGap bool
+	//maxGapIndex int
 }
 
 // firstSegment returns the first segment in the subtree rooted by n.
@@ -719,6 +770,12 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		n.hasChildren = true
 		n.children[0] = left
 		n.children[1] = right
+		//n.dirtyMaxGap, left.dirtyMaxGap, right.dirtyMaxGap = true, true, true
+		// update maxGap of left and right
+		left.updateLocalMaxGap()
+		//fmt.Println("left:", left.maxGap)
+		right.updateLocalMaxGap()
+		//fmt.Println("right:", right.maxGap)
 		if gap.node != n {
 			return gap
 		}
@@ -746,6 +803,7 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 	}
 	n.parent.children[n.parentIndex+1] = sibling
 	n.parent.nrSegments++
+	//n.parent.dirtyMaxGap, sibling.dirtyMaxGap = true, true
 	copy(sibling.keys[:minDegree-1], n.keys[minDegree:])
 	copy(sibling.values[:minDegree-1], n.values[minDegree:])
 	zeroValueSlice(n.values[minDegree-1:])
@@ -758,6 +816,10 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 		}
 	}
 	n.nrSegments = minDegree - 1
+	//n.dirtyMaxGap = true
+	// update maxGap of n and sibling
+	n.updateLocalMaxGap()
+	sibling.updateLocalMaxGap()
 	// gap.node can't be n.parent because gaps are always in leaf nodes.
 	if gap.node != n {
 		return gap
@@ -777,10 +839,13 @@ func (n *node) rebalanceBeforeInsert(gap GapIterator) GapIterator {
 func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 	for {
 		if n.nrSegments >= minDegree-1 {
+			// n must be a leaf as guaranteed by merge
+			//n.updateMaxGap(0)
 			return gap
 		}
 		if n.parent == nil {
 			// Root is allowed to be deficient.
+			//n.updateLocalMaxGap()
 			return gap
 		}
 		// There's one other thing we can do before resorting to unsplitting.
@@ -821,12 +886,17 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 			}
 			n.nrSegments++
 			sibling.nrSegments--
+			// update maxgap of n and sibling solely
+			n.updateLocalMaxGap()
+			sibling.updateLocalMaxGap()
+			// todo: why this could happen?
 			if gap.node == sibling && gap.index == sibling.nrSegments {
 				return GapIterator{n, 0}
 			}
 			if gap.node == n {
 				return GapIterator{n, gap.index + 1}
 			}
+			// todo: why this could happen?
 			return gap
 		}
 		if sibling := n.nextSibling(); sibling != nil && sibling.nrSegments >= minDegree {
@@ -849,6 +919,10 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 			}
 			n.nrSegments++
 			sibling.nrSegments--
+			// update maxgap of n and sibling solely, no need to update p
+			n.updateLocalMaxGap()
+			sibling.updateLocalMaxGap()
+			// todo: why this could happen?
 			if gap.node == sibling {
 				if gap.index == 0 {
 					return GapIterator{n, n.nrSegments}
@@ -886,6 +960,7 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 				p.children[0] = nil
 				p.children[1] = nil
 			}
+			// no need to update maxGap of p as it's not changed
 			if gap.node == left {
 				return GapIterator{p, gap.index}
 			}
@@ -932,8 +1007,161 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 		}
 		p.children[p.nrSegments] = nil
 		p.nrSegments--
+		// update maxGap of left, no need to change p
+		// right is already meaningless
+		left.updateLocalMaxGap()
 		// This process robs p of one segment, so recurse into rebalancing p.
 		n = p
+	}
+}
+
+// update maxGap bottom up from the calling leaf
+// this call should only be made on leaf code with parameter as 0
+func (n *node) updateMaxGap(newMaxGap Key) {
+	max := newMaxGap
+	if !n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	}
+	//fmt.Println("max:", max, n.maxGap)
+	if max == n.maxGap {
+		return
+	} else if max > n.maxGap {
+		n.maxGap = max
+		if n.parent != nil && n.parent.maxGap < n.maxGap {
+			n.parent.updateMaxGap(max)
+		}
+		//if n.parent != nil && n.parent.maxGap == n.maxGap {
+		//	n.maxGap = max
+		//	n.parent.updateMaxGap(max)
+		//} else if n.parent != nil {
+		//	if max > n.parent.maxGap {
+		//		n.maxGap = max
+		//		n.parent.updateMaxGap(max)
+		//	} else {
+		//		n.maxGap = max
+		//	}
+		//} else {
+		//	n.maxGap = max
+		//}
+	} else {
+		if n.parent != nil && n.parent.maxGap == n.maxGap {
+			n.maxGap = max
+			var parentNewMax Key
+			for i := 0; i <= n.parent.nrSegments; i++ {
+				child := n.parent.children[i]
+				if temp := child.maxGap; i == 0 || temp > parentNewMax {
+					parentNewMax = temp
+				}
+			}
+			//fmt.Println("parent:", parentNewMax, n.parent.maxGap)
+			if parentNewMax != n.parent.maxGap {
+				n.parent.updateMaxGap(parentNewMax)
+			}
+		} else {
+			n.maxGap = max
+		}
+	}
+}
+
+// update maxGap of the calling node solely
+// no propagation to parent node
+func (n *node) updateLocalMaxGap() {
+	var max Key
+	if !n.hasChildren {
+		// leaf node iterates gaps
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	} else {
+		// non-leaf node iterates its children
+		for i := 0; i <= n.nrSegments; i++ {
+			child := n.children[i]
+			if temp := child.maxGap; i == 0 || temp > max {
+				max = temp
+			}
+		}
+	}
+	n.maxGap = max
+}
+
+// search and return the first gap having at least minSize length
+// in the subtree rooted by n. if not found, return terminal gap
+func (n *node) searchFirstLargeEnoughGap(minSize Key) GapIterator {
+	if n.maxGap < minSize {
+		return GapIterator{}
+	}
+	if n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			if temp := n.children[i].searchFirstLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		}
+	} else {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if currentGap.Range().Length() >= minSize {
+				return currentGap
+			}
+		}
+	}
+	panic(fmt.Sprintf("invalid maxGap in %v", n))
+}
+
+// search and return the last gap having at least minSize length
+// in the subtree rooted by n. if not found, return terminal gap
+func (n *node) searchLastLargeEnoughGap(minSize Key) GapIterator {
+	if n.maxGap < minSize {
+		return GapIterator{}
+	}
+	if n.hasChildren {
+		for i := n.nrSegments; i >= 0; i-- {
+			if temp := n.children[i].searchLastLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		}
+	} else {
+		for i := n.nrSegments; i >= 0; i-- {
+			currentGap := GapIterator{n, i}
+			if currentGap.Range().Length() >= minSize {
+				return currentGap
+			}
+		}
+	}
+	panic(fmt.Sprintf("invalid maxGap in %v", n))
+}
+
+func (n *node) checkMaxGap() error {
+	var max Key
+	if !n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	} else {
+		for i := 0; i <= n.nrSegments; i++ {
+			child := n.children[i]
+			if err := child.checkMaxGap(); err != nil {
+				return err
+			}
+			if temp := child.maxGap; i == 0 || temp > max {
+				max = temp
+			}
+		}
+	}
+	if max == n.maxGap {
+		return nil
+	} else {
+		return fmt.Errorf("maxGap wrong in node\n%vexpected: %d got: %d", n, max, n.maxGap)
 	}
 }
 
@@ -1243,6 +1471,94 @@ func (gap GapIterator) NextGap() GapIterator {
 	return seg.NextGap()
 }
 
+func (gap GapIterator) NextLargeEnoughGap(minSize Key) GapIterator {
+	if gap.node != nil && gap.node.hasChildren && gap.index == gap.node.nrSegments {
+		gap.node = gap.node.children[gap.index]
+		gap.index = 0
+		return gap.NextLargeEnoughGapHelper(minSize)
+	}
+	return gap.NextLargeEnoughGapHelper(minSize)
+}
+
+// precondition: gap is not the trailing gap of a non-leaf node
+func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
+	// crawl up the tree if no large enough gap in current node or the current gap is the trailing one on leaf level
+	for gap.node != nil &&
+		(gap.node.maxGap < minSize || (!gap.node.hasChildren && gap.index == gap.node.nrSegments)) {
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	// no large enough gap throughout the whole set
+	if gap.node == nil {
+		return GapIterator{}
+	}
+	// move next
+	gap.index++
+	// iterates gap to next
+	for gap.index <= gap.node.nrSegments {
+		if gap.node.hasChildren {
+			if temp := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		} else {
+			if gap.Range().Length() >= minSize {
+				return gap
+			}
+		}
+		gap.index++
+	}
+	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	if gap.node != nil && gap.index == gap.node.nrSegments {
+		// gap is the trailing gap of a non-leaf node
+		// crawl up again
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	return gap.NextLargeEnoughGapHelper(minSize)
+}
+
+func (gap GapIterator) PrevLargeEnoughGap(minSize Key) GapIterator {
+	if gap.node != nil && gap.node.hasChildren && gap.index == 0 {
+		gap.node = gap.node.children[gap.index]
+		gap.index = gap.node.nrSegments
+		return gap.PrevLargeEnoughGapHelper(minSize)
+	}
+	return gap.PrevLargeEnoughGapHelper(minSize)
+}
+
+// precondition: gap is not the first gap of a non-leaf node
+func (gap GapIterator) PrevLargeEnoughGapHelper(minSize Key) GapIterator {
+	// crawl up the tree if no large enough gap in current node or the current gap is the first one on leaf level
+	for gap.node != nil &&
+		(gap.node.maxGap < minSize || (!gap.node.hasChildren && gap.index == 0)) {
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	// no large enough gap throughout the whole set
+	if gap.node == nil {
+		return GapIterator{}
+	}
+	// move prev
+	gap.index--
+	// iterates gap to prev
+	for gap.index >= 0 {
+		if gap.node.hasChildren {
+			if temp := gap.node.children[gap.index].searchLastLargeEnoughGap(minSize); temp.Ok() {
+				return temp
+			}
+		} else {
+			if gap.Range().Length() >= minSize {
+				return gap
+			}
+		}
+		gap.index--
+	}
+	gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	if gap.node != nil && gap.index == 0 {
+		// gap is the first gap of a non-leaf node
+		// crawl up again
+		gap.node, gap.index = gap.node.parent, gap.node.parentIndex
+	}
+	return gap.PrevLargeEnoughGapHelper(minSize)
+}
+
 // segmentBeforePosition returns the predecessor segment of the position given
 // by n.children[i], which may or may not contain a child. If no such segment
 // exists, segmentBeforePosition returns a terminal iterator.
@@ -1266,6 +1582,7 @@ func segmentAfterPosition(n *node, i int) Iterator {
 		}
 		n, i = n.parent, n.parentIndex
 	}
+	//fmt.Println(n.nrSegments)
 	return Iterator{n, i}
 }
 
@@ -1310,7 +1627,7 @@ func (n *node) writeDebugString(buf *bytes.Buffer, prefix string) {
 			child.writeDebugString(buf, fmt.Sprintf("%s- % 3d ", prefix, i))
 		}
 		buf.WriteString(prefix)
-		buf.WriteString(fmt.Sprintf("- % 3d: %v => %v\n", i, n.keys[i], n.values[i]))
+		buf.WriteString(fmt.Sprintf("- % 3d: %v => %v, maxGap: %d\n", i, n.keys[i], n.values[i], n.maxGap))
 	}
 	if child := n.children[n.nrSegments]; child != nil {
 		child.writeDebugString(buf, fmt.Sprintf("%s- % 3d ", prefix, n.nrSegments))
