@@ -130,7 +130,7 @@ func TestAddRandomWithRandomInterval(t *testing.T) {
 	//rand.Seed(time.Now().UnixNano())
 	var nrInsertions int
 	for i, j := range order {
-		if !s.AddWithoutMerging(Range{j, j + rand.Intn(intervalLength) + 1}, j+valueOffset) {
+		if !s.AddWithoutMerging(Range{j, j + rand.Intn(intervalLength-1) + 1}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -257,7 +257,7 @@ func TestAddRandomRemoveRandomHalfWithMerge(t *testing.T) {
 	order := randIntervalPermutation(testSize * 2)
 	order = order[:testSize]
 	for i, j := range order {
-		if !s.Add(Range{j, j + 10}, j+valueOffset) {
+		if !s.Add(Range{j, j + intervalLength}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -308,7 +308,7 @@ func TestNextLargeEnoughGap(t *testing.T) {
 	order = order[:testSize]
 	rand.Seed(time.Now().UnixNano())
 	for i, j := range order {
-		if !s.Add(Range{j, j + rand.Intn(9) + 1}, j+valueOffset) {
+		if !s.Add(Range{j, j + rand.Intn(intervalLength-1) + 1}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -352,11 +352,12 @@ func TestPrevLargeEnoughGap(t *testing.T) {
 	order = order[:testSize]
 	rand.Seed(time.Now().UnixNano())
 	for i, j := range order {
-		if !s.Add(Range{j, j + rand.Intn(9) + 1}, j+valueOffset) {
+		if !s.Add(Range{j, j + rand.Intn(intervalLength-1) + 1}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
 	}
+	end := s.LastSegment().End()
 	shuffle(order)
 	order = order[:testSize/2]
 	for _, j := range order {
@@ -368,7 +369,7 @@ func TestPrevLargeEnoughGap(t *testing.T) {
 	}
 	minSize := 7
 	var gapArr1 []int
-	for gap := s.UpperBoundGap(2000020); gap.Ok(); gap = gap.PrevLargeEnoughGap(minSize) {
+	for gap := s.UpperBoundGap(end + intervalLength); gap.Ok(); gap = gap.PrevLargeEnoughGap(minSize) {
 		if gap.Range().Length() < minSize {
 			t.Errorf("PrevLargeEnoughGap wrong, gap length %d, wanted %d", gap.Range().Length(), minSize)
 		} else {
