@@ -33,17 +33,11 @@ const (
 	// valueOffset is the difference between the value and start of test
 	// segments.
 	valueOffset = 100000
+	// intervalLength is the interval used by random gap tests.
+	intervalLength = 10
 )
 
 func shuffle(xs []int) {
-	for i := range xs {
-		j := rand.Intn(i + 1)
-		xs[i], xs[j] = xs[j], xs[i]
-	}
-}
-
-func randomShuffle(xs []int) {
-	rand.Seed(time.Now().UnixNano())
 	for i := range xs {
 		j := rand.Intn(i + 1)
 		xs[i], xs[j] = xs[j], xs[i]
@@ -62,7 +56,7 @@ func randPermutation(size int) []int {
 func randIntervalPermutation(size int) []int {
 	p := make([]int, size)
 	for i := range p {
-		p[i] = 10 * i
+		p[i] = intervalLength * i
 	}
 	shuffle(p)
 	return p
@@ -136,7 +130,7 @@ func TestAddRandomWithRandomInterval(t *testing.T) {
 	//rand.Seed(time.Now().UnixNano())
 	var nrInsertions int
 	for i, j := range order {
-		if !s.AddWithoutMerging(Range{j, j + rand.Intn(9) + 1}, j+valueOffset) {
+		if !s.AddWithoutMerging(Range{j, j + rand.Intn(intervalLength) + 1}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -164,7 +158,7 @@ func TestAddRandomWithMerge(t *testing.T) {
 	order := randIntervalPermutation(testSize)
 	nrInsertions := 1
 	for i, j := range order {
-		if !s.Add(Range{j, j + 10}, j+valueOffset) {
+		if !s.Add(Range{j, j + intervalLength}, j+valueOffset) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
@@ -223,7 +217,7 @@ func TestRemoveRandomHalf(t *testing.T) {
 	var s Set
 	//rand.Seed(time.Now().UnixNano())
 	for i := 0; i < testSize; i++ {
-		if !s.AddWithoutMerging(Range{10 * i, 10*i + rand.Intn(9) + 1}, 10*i+valueOffset) {
+		if !s.AddWithoutMerging(Range{intervalLength * i, intervalLength*i + rand.Intn(intervalLength-1) + 1}, intervalLength*i+valueOffset) {
 			t.Fatalf("Failed to insert segment %d", i)
 		}
 	}
@@ -329,22 +323,22 @@ func TestNextLargeEnoughGap(t *testing.T) {
 		s.Remove(seg)
 	}
 	minSize := 7
-	var gaparr1 []int
+	var gapArr1 []int
 	for gap := s.LowerBoundGap(0); gap.Ok(); gap = gap.NextLargeEnoughGap(minSize) {
 		if gap.Range().Length() < minSize {
 			t.Errorf("NextLargeEnoughGap wrong, gap length %d, wanted %d", gap.Range().Length(), minSize)
 		} else {
-			gaparr1 = append(gaparr1, gap.Range().Start)
+			gapArr1 = append(gapArr1, gap.Range().Start)
 		}
 	}
-	var gaparr2 []int
+	var gapArr2 []int
 	for gap := s.LowerBoundGap(0); gap.Ok(); gap = gap.NextGap() {
 		if gap.Range().Length() >= minSize {
-			gaparr2 = append(gaparr2, gap.Range().Start)
+			gapArr2 = append(gapArr2, gap.Range().Start)
 		}
 	}
-	if !Equal(gaparr2, gaparr1) {
-		t.Errorf("Search result not correct, got: %v, wanted: %v", gaparr1, gaparr2)
+	if !Equal(gapArr2, gapArr1) {
+		t.Errorf("Search result not correct, got: %v, wanted: %v", gapArr1, gapArr2)
 	}
 	if t.Failed() {
 		t.Logf("Set contents:\n%v", &s)
@@ -373,23 +367,23 @@ func TestPrevLargeEnoughGap(t *testing.T) {
 		s.Remove(seg)
 	}
 	minSize := 7
-	var gaparr1 []int
+	var gapArr1 []int
 	for gap := s.UpperBoundGap(2000020); gap.Ok(); gap = gap.PrevLargeEnoughGap(minSize) {
 		if gap.Range().Length() < minSize {
 			t.Errorf("PrevLargeEnoughGap wrong, gap length %d, wanted %d", gap.Range().Length(), minSize)
 		} else {
-			gaparr1 = append(gaparr1, gap.Range().Start)
+			gapArr1 = append(gapArr1, gap.Range().Start)
 		}
 	}
-	var gaparr2 []int
+	var gapArr2 []int
 	for gap := s.UpperBoundGap(2000020); gap.Ok(); gap = gap.PrevGap() {
 		//t.Logf("Nextgap %v", gap.Range())
 		if gap.Range().Length() >= minSize {
-			gaparr2 = append(gaparr2, gap.Range().Start)
+			gapArr2 = append(gapArr2, gap.Range().Start)
 		}
 	}
-	if !Equal(gaparr2, gaparr1) {
-		t.Errorf("Search result not correct, got: %v, wanted: %v", gaparr1, gaparr2)
+	if !Equal(gapArr2, gapArr1) {
+		t.Errorf("Search result not correct, got: %v, wanted: %v", gapArr1, gapArr2)
 	}
 	if t.Failed() {
 		t.Logf("Set contents:\n%v", &s)
