@@ -682,9 +682,10 @@ type node struct {
 	values   [maxDegree - 1]Value
 	children [maxDegree]*node
 
-	// The longest gap within this node,
-	// which means the maximum gap with gapIterator.node pointing to this node
-	// including the first and last gap possibly shared with upper-level nodes.
+	// The longest gap within this node. If the node is a leaf, it's simply the
+	// maximum gap among all the gaps with gapIterator.node pointing to this node
+	// including the first and last gap possibly shared with its upper-level nodes;
+	// if it's a non-leaf node, it's the max of children's maxGap
 	maxGap Key
 }
 
