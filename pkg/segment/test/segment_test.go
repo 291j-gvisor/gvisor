@@ -215,7 +215,7 @@ func TestRemoveRandom(t *testing.T) {
 
 func TestRemoveRandomHalf(t *testing.T) {
 	var s Set
-	//rand.Seed(time.Now().UnixNano())
+	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < testSize; i++ {
 		if !s.AddWithoutMerging(Range{intervalLength * i, intervalLength*i + rand.Intn(intervalLength-1) + 1}, intervalLength*i+valueOffset) {
 			t.Fatalf("Failed to insert segment %d", i)
@@ -326,7 +326,7 @@ func TestNextLargeEnoughGap(t *testing.T) {
 	var gapArr1 []int
 	for gap := s.LowerBoundGap(0); gap.Ok(); gap = gap.NextLargeEnoughGap(minSize) {
 		if gap.Range().Length() < minSize {
-			t.Errorf("NextLargeEnoughGap wrong, gap length %d, wanted %d", gap.Range().Length(), minSize)
+			t.Errorf("NextLargeEnoughGap wrong, gap %v has length %d, wanted %d", gap.Range(), gap.Range().Length(), minSize)
 		} else {
 			gapArr1 = append(gapArr1, gap.Range().Start)
 		}

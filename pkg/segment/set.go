@@ -336,12 +336,12 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 				// Update maxGap of this gap if the actual merge happens on a non-leaf node.
 				prev.SetEndUnchecked(r.End)
 				prev.SetValue(mval)
-				gap.node.updateMaxGap(0)
+				gap.node.updateMaxGapLeaf()
 			} else if gap.Range().Length() == prev.node.maxGap {
 				//Update maxGap if the original max gap is merged.
 				prev.SetEndUnchecked(r.End)
 				prev.SetValue(mval)
-				prev.node.updateMaxGap(0)
+				prev.node.updateMaxGapLeaf()
 			} else {
 				// No need to update maxGap.
 				prev.SetEndUnchecked(r.End)
@@ -365,12 +365,12 @@ func (s *Set) Insert(gap GapIterator, r Range, val Value) Iterator {
 				// Update maxGap of this gap if the actual merge happens on a non-leaf node.
 				next.SetStartUnchecked(r.Start)
 				next.SetValue(mval)
-				gap.node.updateMaxGap(0)
+				gap.node.updateMaxGapLeaf()
 			} else if gap.Range().Length() == next.node.maxGap {
 				//Update maxGap if the original max gap is merged.
 				next.SetStartUnchecked(r.Start)
 				next.SetValue(mval)
-				next.node.updateMaxGap(0)
+				next.node.updateMaxGapLeaf()
 			} else {
 				// No need to update maxGap.
 				next.SetStartUnchecked(r.Start)
@@ -413,7 +413,7 @@ func (s *Set) InsertWithoutMergingUnchecked(gap GapIterator, r Range, val Value)
 	gap.node.nrSegments++
 	newseg := Iterator{gap.node, gap.index}
 	// Update the maxGap after doing insert on the rebalanced tree.
-	gap.node.updateMaxGap(0)
+	gap.node.updateMaxGapLeaf()
 	return newseg
 }
 
@@ -437,7 +437,7 @@ func (s *Set) Remove(seg Iterator) GapIterator {
 		seg.SetValue(victim.Value())
 		// Need to update the sibling's maxGap in this case.
 		sibling := seg.NextSegment()
-		sibling.node.updateMaxGap(0)
+		sibling.node.updateMaxGapLeaf()
 		return s.Remove(victim).NextGap()
 	}
 	copy(seg.node.keys[seg.index:], seg.node.keys[seg.index+1:seg.node.nrSegments])
@@ -445,7 +445,7 @@ func (s *Set) Remove(seg Iterator) GapIterator {
 	Functions{}.ClearValue(&seg.node.values[seg.node.nrSegments-1])
 	seg.node.nrSegments--
 	// Update maxGap bottom up from the victim node.
-	seg.node.updateMaxGap(0)
+	seg.node.updateMaxGapLeaf()
 	// The B-tree invariant may violated temporally,
 	// but will be fixed in rebalanceAfterRemove.
 	// MaxGap will also be maintained there.
@@ -1009,10 +1009,11 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 	}
 }
 
-// updatemaxGap updates maxGap bottom-up from the calling leaf until no necessary update.
-// This should only be called on leaf node with parameter as 0
-func (n *node) updateMaxGap(newMaxGap Key) {
-	max := newMaxGap
+// updateMaxGapLeaf updates maxGap bottom-up from the calling leaf until no necessary update.
+//
+// Precondition: Should always and only be called on a leaf node.
+func (n *node) updateMaxGapLeaf() {
+	var max Key
 	if !n.hasChildren {
 		for i := 0; i <= n.nrSegments; i++ {
 			currentGap := GapIterator{n, i}
@@ -1020,16 +1021,24 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 				max = temp
 			}
 		}
+	} else {
+		panic(fmt.Sprintf("updateMaxGapLeaf should always be called on leaf node: %v", n))
 	}
 	if max == n.maxGap {
+		// If new max equals the old maxGap, no update is needed.
 		return
 	} else if max > n.maxGap {
+		// If new max is larger than the old maxGap, update it.
 		n.maxGap = max
+		// Only if new maxGap is larger than parent's old maxGap, propagate this update to parent.
 		if n.parent != nil && n.parent.maxGap < n.maxGap {
-			n.parent.updateMaxGap(max)
+			n.parent.updateMaxGapInternal(max)
 		}
 	} else {
 		if n.parent != nil && n.parent.maxGap == n.maxGap {
+			// If new max is smaller than the old maxGap, and this gap used to be the maxGap of its parent,
+			// iterate parent's children and calculate parent's new maxGap.
+			// (It's probable that parent has two children with the old maxGap, but we need to check it anyway.)
 			n.maxGap = max
 			var parentNewMax Key
 			for i := 0; i <= n.parent.nrSegments; i++ {
@@ -1038,11 +1047,56 @@ func (n *node) updateMaxGap(newMaxGap Key) {
 					parentNewMax = temp
 				}
 			}
+			// If parent's new maxGap differs from the old one, propagate this update.
 			if parentNewMax != n.parent.maxGap {
-				n.parent.updateMaxGap(parentNewMax)
+				n.parent.updateMaxGapInternal(parentNewMax)
 			}
 		} else {
+			// If new max is smaller than the old maxGap, but parent's maxGap is not this one,
+			// only need to update locally
 			n.maxGap = max
+		}
+	}
+}
+
+// updateMaxGapInternal updates the maxGap on internal nodes recursively.
+//
+// Precondition: Should only be called by updateMaxGapLeaf or updateMaxGapInternal recursively.
+func (n *node) updateMaxGapInternal(newMaxGap Key) {
+	if !n.hasChildren {
+		panic(fmt.Sprintf("updateMaxGapInternal should always be called on non-leaf node: %v", n))
+	}
+	if newMaxGap == n.maxGap {
+		// If newMaxGap equals the old maxGap, no update is needed.
+		return
+	} else if newMaxGap > n.maxGap {
+		// If newMaxGap is larger than the old maxGap, update it.
+		n.maxGap = newMaxGap
+		// Only if new maxGap is larger than parent's old maxGap, propagate this update to parent.
+		if n.parent != nil && n.parent.maxGap < n.maxGap {
+			n.parent.updateMaxGapInternal(newMaxGap)
+		}
+	} else {
+		if n.parent != nil && n.parent.maxGap == n.maxGap {
+			// If newMaxGap is smaller than the old maxGap, and this gap used to be the maxGap of its parent,
+			// iterate parent's children and calculate parent's new maxGap.
+			// (It's probable that parent has two children with the old maxGap, but we need to check it anyway.)
+			n.maxGap = newMaxGap
+			var parentNewMax Key
+			for i := 0; i <= n.parent.nrSegments; i++ {
+				child := n.parent.children[i]
+				if temp := child.maxGap; i == 0 || temp > parentNewMax {
+					parentNewMax = temp
+				}
+			}
+			// If parent's new maxGap differs from the old one, propagate this update.
+			if parentNewMax != n.parent.maxGap {
+				n.parent.updateMaxGapInternal(parentNewMax)
+			}
+		} else {
+			// If newMaxGap is smaller than the old maxGap, but parent's maxGap is not this one,
+			// only need to update locally
+			n.maxGap = newMaxGap
 		}
 	}
 }
