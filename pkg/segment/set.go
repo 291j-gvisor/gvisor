@@ -1109,8 +1109,8 @@ func (n *node) updateLocalMaxGap() {
 		// Non-leaf node iterates its children.
 		max = n.children[0].maxGap
 		for i := 1; i <= n.nrSegments; i++ {
-			if temp := n.children[i].maxGap; temp > max {
-				max = temp
+			if current := n.children[i].maxGap; current > max {
+				max = current
 			}
 		}
 	}
@@ -1125,8 +1125,8 @@ func (n *node) searchFirstLargeEnoughGap(minSize Key) GapIterator {
 	}
 	if n.hasChildren {
 		for i := 0; i <= n.nrSegments; i++ {
-			if temp := n.children[i].searchFirstLargeEnoughGap(minSize); temp.Ok() {
-				return temp
+			if largeEnoughGap := n.children[i].searchFirstLargeEnoughGap(minSize); largeEnoughGap.Ok() {
+				return largeEnoughGap
 			}
 		}
 	} else {
@@ -1148,8 +1148,8 @@ func (n *node) searchLastLargeEnoughGap(minSize Key) GapIterator {
 	}
 	if n.hasChildren {
 		for i := n.nrSegments; i >= 0; i-- {
-			if temp := n.children[i].searchLastLargeEnoughGap(minSize); temp.Ok() {
-				return temp
+			if largeEnoughGap := n.children[i].searchLastLargeEnoughGap(minSize); largeEnoughGap.Ok() {
+				return largeEnoughGap
 			}
 		}
 	} else {
@@ -1496,8 +1496,8 @@ func (gap GapIterator) NextLargeEnoughGapHelper(minSize Key) GapIterator {
 	gap.index++
 	for gap.index <= gap.node.nrSegments {
 		if gap.node.hasChildren {
-			if temp := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); temp.Ok() {
-				return temp
+			if largeEnoughGap := gap.node.children[gap.index].searchFirstLargeEnoughGap(minSize); largeEnoughGap.Ok() {
+				return largeEnoughGap
 			}
 		} else {
 			if gap.Range().Length() >= minSize {
@@ -1541,8 +1541,8 @@ func (gap GapIterator) PrevLargeEnoughGapHelper(minSize Key) GapIterator {
 	gap.index--
 	for gap.index >= 0 {
 		if gap.node.hasChildren {
-			if temp := gap.node.children[gap.index].searchLastLargeEnoughGap(minSize); temp.Ok() {
-				return temp
+			if largeEnoughGap := gap.node.children[gap.index].searchLastLargeEnoughGap(minSize); largeEnoughGap.Ok() {
+				return largeEnoughGap
 			}
 		} else {
 			if gap.Range().Length() >= minSize {
