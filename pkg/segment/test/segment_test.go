@@ -86,6 +86,40 @@ func checkSet(s *Set, expectedSegments int) error {
 	return nil
 }
 
+// checkSetMaxGap returns an error if maxGap inside all nodes of s is not well maintained
+func checkSetMaxGap(s *Set) error {
+	n := s.root
+	return checkNodeMaxGap(&n)
+}
+
+// checkNodeMaxGap returns an error if maxGap inside the subtree rooted by n is not well maintained
+func checkNodeMaxGap(n *node) error {
+	var max int
+	if !n.hasChildren {
+		for i := 0; i <= n.nrSegments; i++ {
+			currentGap := GapIterator{n, i}
+			if temp := currentGap.Range().Length(); i == 0 || temp > max {
+				max = temp
+			}
+		}
+	} else {
+		for i := 0; i <= n.nrSegments; i++ {
+			child := n.children[i]
+			if err := checkNodeMaxGap(child); err != nil {
+				return err
+			}
+			if temp := child.maxGap; i == 0 || temp > max {
+				max = temp
+			}
+		}
+	}
+	if max == n.maxGap {
+		return nil
+	} else {
+		return fmt.Errorf("maxGap wrong in node\n%vexpected: %d got: %d", n, max, n.maxGap)
+	}
+}
+
 // countSegmentsIn returns the number of segments in s.
 func countSegmentsIn(s *Set) int {
 	var count int
@@ -109,7 +143,7 @@ func TestAddRandom(t *testing.T) {
 			t.Errorf("Iteration %d: %v", i, err)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When inserting %d: %v", j, err)
 			break
 		}
@@ -137,7 +171,7 @@ func TestAddRandomWithRandomInterval(t *testing.T) {
 			t.Errorf("Iteration %d: %v", i, err)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When inserting %d: %v", j, err)
 			break
 		}
@@ -160,7 +194,7 @@ func TestAddRandomWithMerge(t *testing.T) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When inserting %d: %v", j, err)
 			break
 		}
@@ -196,7 +230,7 @@ func TestRemoveRandom(t *testing.T) {
 			t.Errorf("Iteration %d: %v", i, err)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When removing %v: %v", temprange, err)
 			break
 		}
@@ -235,7 +269,7 @@ func TestRemoveRandomHalf(t *testing.T) {
 			t.Errorf("Iteration %d: %v", i, err)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When removing %v: %v", temprange, err)
 			break
 		}
@@ -259,7 +293,7 @@ func TestAddRandomRemoveRandomHalfWithMerge(t *testing.T) {
 			t.Errorf("Iteration %d: failed to insert segment with key %d", i, j)
 			break
 		}
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When inserting %d: %v", j, err)
 			break
 		}
@@ -274,7 +308,7 @@ func TestAddRandomRemoveRandomHalfWithMerge(t *testing.T) {
 		temprange := seg.Range()
 		s.Remove(seg)
 		nrRemovals++
-		if err := s.checkMaxGap(); err != nil {
+		if err := checkSetMaxGap(&s); err != nil {
 			t.Errorf("When removing %v: %v", temprange, err)
 			break
 		}

@@ -94,11 +94,6 @@ type Set struct {
 	root node `state:".(*SegmentDataSlices)"`
 }
 
-// checkMaxGap checks if the maxGap maintenance inside s is well-formed
-func (s *Set) checkMaxGap() error {
-	return s.root.checkMaxGap()
-}
-
 // IsEmpty returns true if the set contains no segments.
 func (s *Set) IsEmpty() bool {
 	return s.root.nrSegments == 0
@@ -1167,34 +1162,6 @@ func (n *node) searchLastLargeEnoughGap(minSize Key) GapIterator {
 		}
 	}
 	panic(fmt.Sprintf("invalid maxGap in %v", n))
-}
-
-// checkMaxGap checks if the maxGap maintenance in the tree rooted by n is well-formed.
-func (n *node) checkMaxGap() error {
-	var max Key
-	if !n.hasChildren {
-		for i := 0; i <= n.nrSegments; i++ {
-			currentGap := GapIterator{n, i}
-			if temp := currentGap.Range().Length(); i == 0 || temp > max {
-				max = temp
-			}
-		}
-	} else {
-		for i := 0; i <= n.nrSegments; i++ {
-			child := n.children[i]
-			if err := child.checkMaxGap(); err != nil {
-				return err
-			}
-			if temp := child.maxGap; i == 0 || temp > max {
-				max = temp
-			}
-		}
-	}
-	if max == n.maxGap {
-		return nil
-	} else {
-		return fmt.Errorf("maxGap wrong in node\n%vexpected: %d got: %d", n, max, n.maxGap)
-	}
 }
 
 // A Iterator is conceptually one of:
