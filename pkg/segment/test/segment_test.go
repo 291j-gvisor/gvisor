@@ -19,7 +19,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-	//"time"
 )
 
 const (
@@ -127,7 +126,6 @@ func TestAddRandom(t *testing.T) {
 func TestAddRandomWithRandomInterval(t *testing.T) {
 	var s Set
 	order := randIntervalPermutation(testSize)
-	//rand.Seed(time.Now().UnixNano())
 	var nrInsertions int
 	for i, j := range order {
 		if !s.AddWithoutMerging(Range{j, j + rand.Intn(intervalLength-1) + 1}, j+valueOffset) {
