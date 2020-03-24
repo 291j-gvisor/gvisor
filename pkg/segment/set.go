@@ -1006,51 +1006,49 @@ func (n *node) rebalanceAfterRemove(gap GapIterator) GapIterator {
 //
 // Precondition: Should always and only be called on a leaf node.
 func (n *node) updateMaxGapLeaf() {
-	var max Key
-	if !n.hasChildren {
-		for i := 0; i <= n.nrSegments; i++ {
-			currentGap := GapIterator{n, i}
-			if temp := currentGap.Range().Length(); i == 0 || temp > max {
-				max = temp
-			}
-		}
-	} else {
+	if n.hasChildren {
 		panic(fmt.Sprintf("updateMaxGapLeaf should always be called on leaf node: %v", n))
+	}
+	max := GapIterator{n, 0}.Range().Length()
+	for i := 1; i <= n.nrSegments; i++ {
+		if current := (GapIterator{n, i}).Range().Length(); current > max {
+			max = current
+		}
 	}
 	if max == n.maxGap {
 		// If new max equals the old maxGap, no update is needed.
 		return
-	} else if max > n.maxGap {
+	}
+	if max > n.maxGap {
 		// If new max is larger than the old maxGap, update it.
 		n.maxGap = max
 		// Only if new maxGap is larger than parent's old maxGap, propagate this update to parent.
 		if n.parent != nil && n.parent.maxGap < n.maxGap {
 			n.parent.updateMaxGapInternal(max)
 		}
-	} else {
-		if n.parent != nil && n.parent.maxGap == n.maxGap {
-			// If new max is smaller than the old maxGap, and this gap used
-			// to be the maxGap of its parent, iterate parent's children
-			// and calculate parent's new maxGap.(It's probable that parent
-			// has two children with the old maxGap, but we need to check it anyway.)
-			n.maxGap = max
-			var parentNewMax Key
-			for i := 0; i <= n.parent.nrSegments; i++ {
-				child := n.parent.children[i]
-				if temp := child.maxGap; i == 0 || temp > parentNewMax {
-					parentNewMax = temp
-				}
-			}
-			// If parent's new maxGap differs from the old one, propagate this update.
-			if parentNewMax != n.parent.maxGap {
-				n.parent.updateMaxGapInternal(parentNewMax)
-			}
-		} else {
-			// If new max is smaller than the old maxGap, but parent's maxGap is not this one,
-			// only need to update locally
-			n.maxGap = max
-		}
+		return
 	}
+	if n.parent != nil && n.parent.maxGap == n.maxGap {
+		// If new max is smaller than the old maxGap, and this gap used
+		// to be the maxGap of its parent, iterate parent's children
+		// and calculate parent's new maxGap.(It's probable that parent
+		// has two children with the old maxGap, but we need to check it anyway.)
+		n.maxGap = max
+		parentNewMax := n.parent.children[0].maxGap
+		for i := 1; i <= n.parent.nrSegments; i++ {
+			if current := n.parent.children[i].maxGap; current > parentNewMax {
+				parentNewMax = current
+			}
+		}
+		// If parent's new maxGap differs from the old one, propagate this update.
+		if parentNewMax != n.parent.maxGap {
+			n.parent.updateMaxGapInternal(parentNewMax)
+		}
+		return
+	}
+	// If new max is smaller than the old maxGap, but parent's maxGap is not this one,
+	// only need to update locally
+	n.maxGap = max
 }
 
 // updateMaxGapInternal updates the maxGap on internal nodes recursively.
@@ -1063,36 +1061,37 @@ func (n *node) updateMaxGapInternal(newMaxGap Key) {
 	if newMaxGap == n.maxGap {
 		// If newMaxGap equals the old maxGap, no update is needed.
 		return
-	} else if newMaxGap > n.maxGap {
+	}
+	if newMaxGap > n.maxGap {
 		// If newMaxGap is larger than the old maxGap, update it.
 		n.maxGap = newMaxGap
 		// Only if new maxGap is larger than parent's old maxGap, propagate this update to parent.
 		if n.parent != nil && n.parent.maxGap < n.maxGap {
 			n.parent.updateMaxGapInternal(newMaxGap)
 		}
-	} else {
-		if n.parent != nil && n.parent.maxGap == n.maxGap {
-			// If newMaxGap is smaller than the old maxGap, and this gap used to be the maxGap of its parent,
-			// iterate parent's children and calculate parent's new maxGap.
-			// (It's probable that parent has two children with the old maxGap, but we need to check it anyway.)
-			n.maxGap = newMaxGap
-			var parentNewMax Key
-			for i := 0; i <= n.parent.nrSegments; i++ {
-				child := n.parent.children[i]
-				if temp := child.maxGap; i == 0 || temp > parentNewMax {
-					parentNewMax = temp
-				}
-			}
-			// If parent's new maxGap differs from the old one, propagate this update.
-			if parentNewMax != n.parent.maxGap {
-				n.parent.updateMaxGapInternal(parentNewMax)
-			}
-		} else {
-			// If newMaxGap is smaller than the old maxGap, but parent's maxGap is not this one,
-			// only need to update locally
-			n.maxGap = newMaxGap
-		}
+		return
 	}
+	if n.parent != nil && n.parent.maxGap == n.maxGap {
+		// If new max is smaller than the old maxGap, and this gap used
+		// to be the maxGap of its parent, iterate parent's children
+		// and calculate parent's new maxGap.(It's probable that parent
+		// has two children with the old maxGap, but we need to check it anyway.)
+		n.maxGap = newMaxGap
+		parentNewMax := n.parent.children[0].maxGap
+		for i := 1; i <= n.parent.nrSegments; i++ {
+			if current := n.parent.children[i].maxGap; current > parentNewMax {
+				parentNewMax = current
+			}
+		}
+		// If parent's new maxGap differs from the old one, propagate this update.
+		if parentNewMax != n.parent.maxGap {
+			n.parent.updateMaxGapInternal(parentNewMax)
+		}
+		return
+	}
+	// If new max is smaller than the old maxGap, but parent's maxGap is not this one,
+	// only need to update locally
+	n.maxGap = newMaxGap
 }
 
 // updateLocalMaxGap updates maxGap of the calling node solely with no propagation to ancestor nodes.
@@ -1100,17 +1099,17 @@ func (n *node) updateLocalMaxGap() {
 	var max Key
 	if !n.hasChildren {
 		// Leaf node iterates its gaps.
-		for i := 0; i <= n.nrSegments; i++ {
-			currentGap := GapIterator{n, i}
-			if temp := currentGap.Range().Length(); i == 0 || temp > max {
-				max = temp
+		max = GapIterator{n, 0}.Range().Length()
+		for i := 1; i <= n.nrSegments; i++ {
+			if current := (GapIterator{n, i}).Range().Length(); current > max {
+				max = current
 			}
 		}
 	} else {
 		// Non-leaf node iterates its children.
-		for i := 0; i <= n.nrSegments; i++ {
-			child := n.children[i]
-			if temp := child.maxGap; i == 0 || temp > max {
+		max = n.children[0].maxGap
+		for i := 1; i <= n.nrSegments; i++ {
+			if temp := n.children[i].maxGap; temp > max {
 				max = temp
 			}
 		}
